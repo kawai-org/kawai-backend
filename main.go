@@ -1,4 +1,4 @@
-package kawai
+package gcf
 
 import (
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
@@ -8,15 +8,15 @@ import (
 )
 
 func init() {
-	// 1. Siapkan Info Database
+	// Info Database
 	mconn := atdb.DBInfo{
 		DBString: config.MongoString,
-		DBName:   "kawai_db", // Ganti sesuai nama DB kamu
+		DBName:   "kawai_db",
 	}
 
-	// 2. Koneksi ke MongoDB
+	// Koneksi ke MongoDB
 	config.Mongoconn, config.ErrorMongoconn = atdb.MongoConnect(mconn)
 
-	// 3. Daftarkan ke Functions Framework (GCP)
+	// Daftarkan ke Functions Framework (GCP)
 	functions.HTTP("WebHook", route.URL)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/kawai-org/kawai-backend/config"
@@ -12,38 +13,36 @@ import (
 	"github.com/kawai-org/kawai-backend/model"
 )
 
-func TestPostInboxNomor(t *testing.T) {
-	// 1. SETUP: Pastikan koneksi DB ada (sama seperti di atdb_test)
+func TestPostInboxNomorSimpan(t *testing.T) {
+	// 1. Inisialisasi Database untuk Testing
 	mconn := atdb.DBInfo{
 		DBString: "mongodb+srv://penerbit:u2cC2MwwS42yKxub@webhook.jej9ieu.mongodb.net/?retryWrites=true&w=majority&appName=webhook", 
 		DBName:   "kawai_db",
 	}
 	config.Mongoconn, _ = atdb.MongoConnect(mconn)
 
-	// 2. DATA: Buat simulasi pesan dari WhatsApp/WhatsAuth
+	// 2. Simulasi Pesan WhatsApp: "simpan Beli buku baru"
 	msg := model.IteungMessage{
 		Phone:   "628123456789",
-		Alias:   "Kawai User",
-		Message: "Tes kirim pesan ke bot",
+		Message: "simpan Beli buku baru",
 	}
 	body, _ := json.Marshal(msg)
 
-	// 3. REQUEST: Buat request palsu
-	req, _ := http.NewRequest("POST", "/webhook/nomor/628123456789", bytes.NewBuffer(body))
+	req := httptest.NewRequest("POST", "/webhook/nomor/628123456789", bytes.NewBuffer(body))
 	rr := httptest.NewRecorder()
 
-	// 4. EKSEKUSI: Panggil fungsi controller
-	handler := http.HandlerFunc(PostInboxNomor)
-	handler.ServeHTTP(rr, req)
+	// 3. Jalankan Fungsi
+	PostInboxNomor(rr, req)
 
-	// 5. VALIDASI: Cek responnya
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("Status code salah: dapat %v ingin %v", status, http.StatusOK)
+	// 4. Verifikasi
+	if rr.Code != http.StatusOK {
+		t.Errorf("Harusnya 200 OK, dapat %v", rr.Code)
 	}
 
 	var response model.Response
 	json.Unmarshal(rr.Body.Bytes(), &response)
-	if response.Response != "Pesan diterima oleh Kawai" {
-		t.Errorf("Respon pesan salah: %v", response.Response)
+
+	if !strings.Contains(response.Response, "disimpan") {
+		t.Errorf("Respon salah, dapat: %v", response.Response)
 	}
 }
