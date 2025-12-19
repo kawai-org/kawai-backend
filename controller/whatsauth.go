@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"context" // Tambahan untuk fungsi Find DB
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv" // Tambahan untuk parsing halaman (List 1, List 2)
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/kawai-org/kawai-backend/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options" // Tambahan untuk pagination
 )
 
 // Helper: Ekstrak URL dari text
@@ -58,21 +61,19 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Pesan Masuk: %s | Isi: %s\n", msg.From, msg.Message)
 
 	// 2. AUDIT TRAIL: Simpan ke 'message_logs'
-	// PENTING: Kita hapus 'go func()' sementara agar kita bisa lihat errornya langsung di log Vercel jika gagal
 	logMsg := model.MessageLog{
 		ID:         primitive.NewObjectID(),
 		From:       msg.From,
 		Message:    msg.Message,
 		ReceivedAt: time.Now(),
 	}
+	// InsertLog
 	_, errLog := atdb.InsertOneDoc(config.Mongoconn, "message_logs", logMsg)
 	if errLog != nil {
-		fmt.Println("GAGAL SIMPAN MESSAGE LOG:", errLog) // Ini akan muncul di log Vercel
+		fmt.Println("GAGAL SIMPAN MESSAGE LOG:", errLog)
 	}
 
 	// 3. Ambil Profile Bot
-	// Pastikan nama collection di DB kamu 'profile' atau 'bot_profiles'. 
-	// Kita pakai 'profile' dulu karena itu yang sudah ada datanya.
 	profile, err := atdb.GetOneDoc[model.BotProfile](config.Mongoconn, "profile", bson.M{})
 	if err != nil {
 		fmt.Println("Error DB Profile:", err)
@@ -90,11 +91,11 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		if len(parts) > 1 {
 			// Gabungkan kembali sisa pesan
 			content := strings.TrimSpace(strings.Join(parts[1:], " "))
-			
+
 			// Analisa Konten
 			foundURL := extractURL(content)
 			foundTags := extractTags(content)
-			
+
 			noteType := "text"
 			if foundURL != "" {
 				if content == foundURL {
@@ -104,7 +105,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// Simpan ke Notes (Tabel 5)
+			// Simpan ke Notes
 			noteID := primitive.NewObjectID()
 			newNote := model.Note{
 				ID:        noteID,
@@ -114,10 +115,9 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				Type:      noteType,
 				CreatedAt: time.Now(),
 			}
-			// Insert ke collection 'notes'
 			atdb.InsertOneDoc(config.Mongoconn, "notes", newNote)
 
-			// Simpan Relasi Link (Tabel 6)
+			// Simpan Relasi Link
 			if foundURL != "" {
 				newLink := model.Link{
 					ID:        primitive.NewObjectID(),
@@ -126,11 +126,10 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					URL:       foundURL,
 					CreatedAt: time.Now(),
 				}
-				// Insert ke collection 'links' - Otomatis terbuat jika belum ada
 				atdb.InsertOneDoc(config.Mongoconn, "links", newLink)
 			}
 
-			// Simpan Relasi Tags (Tabel 7)
+			// Simpan Relasi Tags
 			if len(foundTags) > 0 {
 				for _, t := range foundTags {
 					newTag := model.Tag{
@@ -139,7 +138,6 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 						TagName:   t,
 						UserPhone: msg.From,
 					}
-					// Insert ke collection 'tags'
 					atdb.InsertOneDoc(config.Mongoconn, "tags", newTag)
 				}
 			}
@@ -150,37 +148,99 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			replyMsg = "Ketik: *Simpan [isi catatan]*"
 		}
 
-	// --- B. FITUR LIST (RETRIEVE) ---
-	} else if strings.HasPrefix(pesanLower, "list") || strings.HasPrefix(pesanLower, "menu") {
+	// --- B. FITUR LIST (RETRIEVE dengan PAGINATION & FORMATTING) ---
+	} else if strings.HasPrefix(pesanLower, "list") || strings.HasPrefix(pesanLower, "tampilkan") || strings.HasPrefix(pesanLower, "menu") {
 		filter := bson.M{"user_phone": msg.From}
+
+		// 1. Logika Pagination
+		page := 1
+		limit := 10 // Menampilkan 10 item per halaman
 		
-		// Jika user minta "list link", ambil dari tabel links
+		parts := strings.Fields(pesan)
+		// Cek apakah ada angka di akhir pesan (misal: "List 2")
+		if len(parts) > 1 {
+			if p, err := strconv.Atoi(parts[len(parts)-1]); err == nil && p > 0 {
+				page = p
+			}
+		}
+		
+		skip := int64((page - 1) * limit)
+		// Opsi Query: Limit 10, Skip sesuai halaman, Urutkan dari yang terbaru
+		findOptions := options.Find().SetLimit(int64(limit)).SetSkip(skip).SetSort(bson.M{"created_at": -1})
+
+		// 2. Mode Tampilkan Link
 		if strings.Contains(pesanLower, "link") {
-			links, _ := atdb.GetAllDoc[[]model.Link](config.Mongoconn, "links", filter)
+			cursor, err := config.Mongoconn.Collection("links").Find(context.TODO(), filter, findOptions)
+			var links []model.Link
+			if err == nil {
+				cursor.All(context.TODO(), &links)
+			}
+
 			if len(links) > 0 {
 				var sb strings.Builder
-				sb.WriteString("🔗 *List Link Kamu:*\n")
+				sb.WriteString(fmt.Sprintf("🔗 *Link Kamu (Hal %d)*\n", page))
+				sb.WriteString("------------------\n")
+				
 				for i, l := range links {
-					sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, l.URL))
+					nomor := (page-1)*limit + i + 1
+					sb.WriteString(fmt.Sprintf("%d. %s\n", nomor, l.URL))
 				}
+				sb.WriteString("------------------\n")
+				sb.WriteString(fmt.Sprintf("Ketik *List Link %d* untuk next.", page+1))
 				replyMsg = sb.String()
 			} else {
-				replyMsg = "Belum ada link tersimpan."
+				if page == 1 {
+					replyMsg = "Belum ada link tersimpan."
+				} else {
+					replyMsg = "Halaman ini kosong."
+				}
 			}
+
+		// 3. Mode Tampilkan Semua Catatan (Default)
 		} else {
-			// Default ambil dari notes
-			notes, _ := atdb.GetAllDoc[[]model.Note](config.Mongoconn, "notes", filter)
+			cursor, err := config.Mongoconn.Collection("notes").Find(context.TODO(), filter, findOptions)
+			var notes []model.Note
+			if err == nil {
+				cursor.All(context.TODO(), &notes)
+			}
+
 			if len(notes) > 0 {
 				var sb strings.Builder
-				sb.WriteString("📝 *Catatan Kamu:*\n")
+				sb.WriteString(fmt.Sprintf("📂 *Catatan (Hal %d)*\n", page))
+				sb.WriteString("------------------\n")
+
 				for i, n := range notes {
-					preview := n.Content
-					if len(preview) > 30 { preview = preview[:30] + "..." }
-					sb.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, n.Type, preview))
+					nomor := (page-1)*limit + i + 1
+					
+					// JUDUL DINAMIS: Ambil konten, potong jika kepanjangan
+					displayTitle := n.Content
+					if len(displayTitle) > 40 {
+						displayTitle = displayTitle[:40] + "..."
+					}
+					
+					// ICON SESUAI TIPE
+					icon := "📝"
+					if n.Type == "link" { icon = "🔗" }
+					if n.Type == "mixed" { icon = "📑" }
+
+					// FORMAT TANGGAL: 19 Des 15:00
+					dateStr := n.CreatedAt.Format("02 Jan 15:04")
+
+					// Format Pesan:
+					// 1. 📝 Judul Singkat...
+					//    (Tanggal)
+					sb.WriteString(fmt.Sprintf("%d. %s *%s*\n   📅 %s\n\n", nomor, icon, displayTitle, dateStr))
 				}
+				
+				sb.WriteString("------------------\n")
+				sb.WriteString(fmt.Sprintf("Ketik *List %d* untuk next.", page+1))
 				replyMsg = sb.String()
 			} else {
-				replyMsg = "Belum ada catatan."
+				if page == 1 {
+					replyMsg = "Belum ada catatan. Yuk *Catat* sesuatu!"
+				} else {
+					replyMsg = "Sudah tidak ada data di halaman ini."
+				}
 			}
 		}
 	}
