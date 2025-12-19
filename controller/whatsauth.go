@@ -57,24 +57,25 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Pesan Masuk: %s | Isi: %s\n", msg.From, msg.Message)
 
-	// 2. AUDIT TRAIL: Simpan ke 'message_logs' (Tabel 1)
-	// Kita simpan mentahannya untuk bukti audit sidang
+	// 2. AUDIT TRAIL: Simpan ke 'message_logs'
+	// PENTING: Kita hapus 'go func()' sementara agar kita bisa lihat errornya langsung di log Vercel jika gagal
 	logMsg := model.MessageLog{
 		ID:         primitive.NewObjectID(),
 		From:       msg.From,
 		Message:    msg.Message,
 		ReceivedAt: time.Now(),
 	}
-	// Gunakan helper generic InsertOneDoc
-	atdb.InsertOneDoc(config.Mongoconn, "message_logs", logMsg)
+	_, errLog := atdb.InsertOneDoc(config.Mongoconn, "message_logs", logMsg)
+	if errLog != nil {
+		fmt.Println("GAGAL SIMPAN MESSAGE LOG:", errLog) // Ini akan muncul di log Vercel
+	}
 
-	// 3. Ambil Profile Bot untuk Token Balasan (Tabel 2)
-	// Note: Collection di MongoDB harus bernama 'bot_profiles' sesuai model baru, 
-    // tapi jika di DB kamu masih 'profile', ubah string di bawah jadi "profile"
+	// 3. Ambil Profile Bot
+	// Pastikan nama collection di DB kamu 'profile' atau 'bot_profiles'. 
+	// Kita pakai 'profile' dulu karena itu yang sudah ada datanya.
 	profile, err := atdb.GetOneDoc[model.BotProfile](config.Mongoconn, "profile", bson.M{})
 	if err != nil {
 		fmt.Println("Error DB Profile:", err)
-        // Jangan return error ke PushWa, biarkan code jalan agar tidak retry terus
 	}
 
 	// 4. SMART LOGIC PROCESSING
@@ -113,6 +114,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				Type:      noteType,
 				CreatedAt: time.Now(),
 			}
+			// Insert ke collection 'notes'
 			atdb.InsertOneDoc(config.Mongoconn, "notes", newNote)
 
 			// Simpan Relasi Link (Tabel 6)
@@ -124,6 +126,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					URL:       foundURL,
 					CreatedAt: time.Now(),
 				}
+				// Insert ke collection 'links' - Otomatis terbuat jika belum ada
 				atdb.InsertOneDoc(config.Mongoconn, "links", newLink)
 			}
 
@@ -136,6 +139,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 						TagName:   t,
 						UserPhone: msg.From,
 					}
+					// Insert ke collection 'tags'
 					atdb.InsertOneDoc(config.Mongoconn, "tags", newTag)
 				}
 			}
@@ -179,9 +183,6 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				replyMsg = "Belum ada catatan."
 			}
 		}
-	} else {
-		// Default reply agar tidak diam
-		// replyMsg = "Halo! Ketik 'simpan [sesuatu]' untuk mencatat."
 	}
 
 	// 5. Kirim Balasan (Tanpa 'go' routine untuk Vercel)

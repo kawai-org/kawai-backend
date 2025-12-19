@@ -178,10 +178,12 @@ func GetOneLowestDoc[T any](db *mongo.Database, collection string, filter bson.M
 // 	return insertResult.InsertedID, nil
 // }
 
+// Helper Generik untuk Insert ke Collection apa saja
 func InsertOneDoc(db *mongo.Database, collection string, doc interface{}) (insertedID primitive.ObjectID, err error) {
 	insertResult, err := db.Collection(collection).InsertOne(context.TODO(), doc)
 	if err != nil {
-		return
+		fmt.Printf("ERROR InsertOneDoc [%s]: %v\n", collection, err) // Debugging Log
+		return primitive.NilObjectID, err
 	}
 	return insertResult.InsertedID.(primitive.ObjectID), nil
 }
