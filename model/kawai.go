@@ -24,8 +24,9 @@ type Identity struct {
 type Note struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	UserPhone string             `bson:"user_phone" json:"user_phone"`
-	Title     string             `bson:"title" json:"title"`
-	Content   string             `bson:"content" json:"content"`
+	Title     string             `bson:"title" json:"title"`     // Bisa diisi otomatis (misal: 10 huruf pertama)
+	Content   string             `bson:"content" json:"content"` // Isinya RAW message (teks + link campur)
+	Type      string             `bson:"type" json:"type"`       // "text" atau "link" (opsional, hasil deteksi bot)
 	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
 }
 

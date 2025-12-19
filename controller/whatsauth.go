@@ -6,8 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kawai-org/kawai-backend/config"
+	"github.com/kawai-org/kawai-backend/helper/atapi"
 	"github.com/kawai-org/kawai-backend/helper/atdb"
 	"github.com/kawai-org/kawai-backend/model"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -23,55 +26,87 @@ func GetHome(respw http.ResponseWriter, req *http.Request) {
 }
 
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
-	var msg model.IteungMessage
-	var resp model.Response
-
-	// Set header konten selalu JSON
 	w.Header().Set("Content-Type", "application/json")
 
-	// 1. Decode pesan masuk
-	err := json.NewDecoder(r.Body).Decode(&msg)
-	if err != nil {
+	// --- 1. LOGIKA URL PARAMETER (PENGGANTI :nomorwa) ---
+	// URL: /webhook/nomor/628123456789
+	// Kita potong prefix "/webhook/nomor/" untuk dapat nomornya
+	pathNomor := strings.TrimPrefix(r.URL.Path, "/webhook/nomor/")
+	
+	// Validasi sederhana: kalau kosong, berarti URL salah
+	if pathNomor == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		resp.Response = "Error: Format pesan tidak valid"
-		json.NewEncoder(w).Encode(resp)
+		json.NewEncoder(w).Encode(model.Response{Response: "URL Salah: Nomor tidak ditemukan di URL"})
 		return
 	}
 
-	// 2. Normalisasi pesan
-	pesan := strings.ToLower(strings.TrimSpace(msg.Message))
-
-	// 3. Logika Perintah: Simpan Catatan
-	if strings.HasPrefix(pesan, "simpan") || strings.HasPrefix(pesan, "catat") {
-		content := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(pesan, "simpan"), "catat"))
-
-		if content == "" {
-			resp.Response = "Waduh, isi catatannya kosong. Coba: simpan [isi catatan]"
-		} else {
-			newNote := model.Note{
-				ID:        primitive.NewObjectID(),
-				UserPhone: msg.Phone,
-				Title:     "Catatan dari WhatsApp",
-				Content:   content,
-				UpdatedAt: time.Now(),
-			}
-
-			_, err := atdb.InsertNote(newNote)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				resp.Response = "Gagal menyimpan ke database."
-			} else {
-				resp.Response = "Siap! Catatan kamu sudah disimpan aman di Kawai. ✨"
-			}
-		}
-	} else if pesan == "halo" || pesan == "hi" {
-		resp.Response = "Halo! Aku Kawai Assistant. Ketik 'simpan [sesuatu]' untuk mencatat ya!"
-	} else {
-		resp.Response = "Aku belum paham perintah itu. Coba ketik 'simpan' diikuti catatanmu."
+	// --- 2. CEK SECRET (KEAMANAN) ---
+	secret := r.Header.Get("secret")
+	if secret == "" {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(model.Response{Response: "Secret Kosong"})
+		return
 	}
 
-	// 4. Kirim Respon Sukses
-	json.NewEncoder(w).Encode(resp)
+	profile, err := atdb.GetOneDoc[model.Profile](config.Mongoconn, "profile", bson.M{})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(model.Response{Response: "Gagal ambil profile DB"})
+		return
+	}
+
+	if secret != profile.Secret {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(model.Response{Response: "Secret Salah"})
+		return
+	}
+
+	// --- 3. DECODE PESAN (STRUCT LENGKAP) ---
+	var msg model.WAMessage
+	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	
+	// Validasi tambahan: Pastikan nomor di URL sama dengan nomor tujuan chat (opsional tapi bagus)
+	// msg.Chat_server biasanya berisi nomor WA server kita
+	
+	// --- 4. LOGIKA BOT ---
+	if !msg.Is_group {
+		pesan := strings.ToLower(strings.TrimSpace(msg.Message))
+		var replyMsg string
+
+		if strings.HasPrefix(pesan, "simpan") || strings.HasPrefix(pesan, "catat") {
+			content := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(pesan, "simpan"), "catat"))
+			if content == "" {
+				replyMsg = "Isi catatannya kosong bos."
+			} else {
+				// Simpan ke DB
+				newNote := model.Note{
+					ID:        primitive.NewObjectID(),
+					UserPhone: msg.Phone_number, // Nomor pengirim
+					Title:     "Catatan WhatsApp",
+					Content:   content,
+					UpdatedAt: time.Now(),
+				}
+				atdb.InsertNote(newNote)
+				replyMsg = "Oke, catatan berhasil disimpan! ✨"
+			}
+		} else {
+            // Logic default
+            return 
+        }
+
+		// Kirim Balasan
+		dt := model.TextMessage{
+			To:       msg.Chat_number,
+			IsGroup:  false,
+			Messages: replyMsg,
+		}
+		atapi.PostStructWithToken[model.Response]("Token", profile.Token, dt, profile.URLApiText)
+	}
+
+	json.NewEncoder(w).Encode(model.Response{Response: "OK"})
 }
 
 func GetNewToken(respw http.ResponseWriter, req *http.Request) {
