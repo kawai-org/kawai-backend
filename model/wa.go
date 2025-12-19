@@ -2,37 +2,31 @@ package model
 
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
-// 1. Struktur Pesan Masuk dari PushWa (Webhook)
-// PushWa biasanya mengirim data dengan format ini
+// 1. Pesan Masuk dari PushWa (Sesuai Info Support)
 type PushWaIncoming struct {
-	From      string `json:"from"`      // Nomor pengirim (e.g., 628xxx)
-	Message   string `json:"message"`   // Isi pesan
-	PushName  string `json:"pushname"`  // Nama kontak WA
-	Type      string `json:"type"`      // Teks, image, dll
-	Timestamp int64  `json:"timestamp"` // Waktu kirim
-	IsGroup   bool   `json:"is_group,omitempty"` // Opsional, tergantung versi PushWa
+	DeviceNumber string `json:"deviceNumber"` // Nomor bot yang menerima
+	Message      string `json:"message"`      // Isi pesan
+	From         string `json:"from"`         // Nomor pengirim (User)
 }
 
-// 2. Struktur untuk Mengirim Pesan (API Send)
-// Dokumentasi PushWa mewajibkan Token ada di dalam Body
+// 2. Struktur Kirim Pesan ke PushWa
 type PushWaSend struct {
 	Token   string `json:"token"`
-	Target  string `json:"target"`  // Nomor tujuan
-	Type    string `json:"type"`    // "text"
-	Delay   string `json:"delay"`   // "1" (detik)
-	Message string `json:"message"` // Isi pesan
+	Target  string `json:"target"`
+	Type    string `json:"type"`
+	Delay   string `json:"delay"`
+	Message string `json:"message"`
 }
 
-// 3. Response sederhana
+// 3. Response Standar
 type Response struct {
 	Response string `json:"response"`
 }
 
-// 4. Profile Database (Update struktur agar sesuai kebutuhan)
+// 4. Profile Database
 type Profile struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Token       string             `bson:"token" json:"token"`
 	Phonenumber string             `bson:"phonenumber" json:"phonenumber"`
 	URLApi      string             `bson:"urlapi" json:"urlapi"` // https://dash.pushwa.com/api/kirimPesan
-	Secret      string             `bson:"secret" json:"secret"` // (Opsional jika PushWa support webhook secret)
 }

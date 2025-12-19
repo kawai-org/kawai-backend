@@ -29,113 +29,97 @@ func GetHome(respw http.ResponseWriter, req *http.Request) {
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// 1. Ambil Profile & Token dari Database
-	profile, err := atdb.GetOneDoc[model.Profile](config.Mongoconn, "profile", bson.M{})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(model.Response{Response: "Gagal ambil profile DB"})
-		return
-	}
-
-	// 2. Decode Pesan Masuk (Format PushWa)
+	// 1. Decode Pesan Masuk (Sesuai Format Baru PushWa)
 	var msg model.PushWaIncoming
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		fmt.Println("Error Decode JSON:", err)
+		json.NewEncoder(w).Encode(model.Response{Response: "Bad Request"})
 		return
 	}
 
-	// Validasi sederhana: Pastikan pesan tidak kosong
-	if msg.Message == "" {
-		json.NewEncoder(w).Encode(model.Response{Response: "Pesan kosong / Format salah"})
+	// Debugging Log: Cek apakah data masuk
+	fmt.Printf("Pesan Masuk: Dari=%s, Isi=%s\n", msg.From, msg.Message)
+
+	// Validasi: Pastikan pengirim dan pesan ada
+	if msg.From == "" || msg.Message == "" {
+		json.NewEncoder(w).Encode(model.Response{Response: "Data Kosong (From/Message)"})
+		return
+	}
+
+	// 2. Ambil Token API dari Database
+	profile, err := atdb.GetOneDoc[model.Profile](config.Mongoconn, "profile", bson.M{})
+	if err != nil {
+		fmt.Println("Error DB Profile:", err)
+		json.NewEncoder(w).Encode(model.Response{Response: "Error DB"})
 		return
 	}
 
 	// 3. Logika Bot
-	// (PushWa kadang kirim pesan group juga, kita filter jika perlu)
-	if !msg.IsGroup { 
-		pesan := strings.TrimSpace(msg.Message)
-		pesanLower := strings.ToLower(pesan)
-		var replyMsg string
+	pesan := strings.TrimSpace(msg.Message)
+	pesanLower := strings.ToLower(pesan)
+	var replyMsg string
 
-		// A. FITUR SIMPAN
-		if strings.HasPrefix(pesanLower, "simpan") || strings.HasPrefix(pesanLower, "catat") {
-			keyword := "simpan"
-			if strings.HasPrefix(pesanLower, "catat") {
-				keyword = "catat"
+	// --- A. FITUR SIMPAN ---
+	if strings.HasPrefix(pesanLower, "simpan") || strings.HasPrefix(pesanLower, "catat") {
+		keyword := "simpan"
+		if strings.HasPrefix(pesanLower, "catat") { keyword = "catat" }
+		
+		// Ambil isi setelah kata kunci
+		content := strings.TrimSpace(pesan[len(keyword):])
+		
+		if content == "" {
+			replyMsg = "Isi catatannya kosong bos. Coba: 'simpan beli beras'"
+		} else {
+			// Simpan ke DB
+			newNote := model.Note{
+				ID:        primitive.NewObjectID(),
+				UserPhone: msg.From, // Pakai msg.From dari PushWa
+				Title:     "Catatan",
+				Content:   content,
+				UpdatedAt: time.Now(),
 			}
-			
-			if len(pesan) <= len(keyword) {
-				replyMsg = "Isi catatannya kosong. Coba: 'simpan beli beras'"
+			_, err := atdb.InsertNote(newNote)
+			if err != nil {
+				replyMsg = "Gagal menyimpan ke database 😢"
+				fmt.Println("Error InsertNote:", err)
 			} else {
-				content := strings.TrimSpace(pesan[len(keyword):])
-				if content == "" {
-					replyMsg = "Isi kosong."
-				} else {
-					// Judul Otomatis
-					title := "Catatan"
-					if len(content) > 20 {
-						title = content[:20] + "..."
-					} else {
-						title = content
-					}
-
-					noteType := "text"
-					if strings.Contains(content, "http") {
-						noteType = "link"
-					}
-
-					newNote := model.Note{
-						ID:        primitive.NewObjectID(),
-						UserPhone: msg.From, // PushWa pakai "from"
-						Title:     title,
-						Content:   content,
-						Type:      noteType,
-						UpdatedAt: time.Now(),
-					}
-					
-					_, err := atdb.InsertNote(newNote)
-					if err != nil {
-						replyMsg = "Gagal menyimpan database 😢"
-					} else {
-						replyMsg = "✅ Tersimpan! (" + noteType + ")"
-					}
-				}
-			}
-
-		// B. FITUR LIST
-		} else if pesanLower == "list" || pesanLower == "menu" {
-			filter := bson.M{"user_phone": msg.From}
-			notes, err := atdb.GetAllDoc[[]model.Note](config.Mongoconn, "notes", filter)
-
-			if err != nil || len(notes) == 0 {
-				replyMsg = "📭 Belum ada catatan. Ketik 'simpan [isi]'."
-			} else {
-				var sb strings.Builder
-				sb.WriteString("📂 *Catatan Kamu:*\n\n")
-				for i, note := range notes {
-					icon := "📝"
-					if note.Type == "link" { icon = "🔗" }
-					preview := note.Content
-					if len(preview) > 30 { preview = preview[:30] + "..." }
-					item := fmt.Sprintf("%d. *%s* %s\n   _%s_\n", i+1, note.Title, icon, preview)
-					sb.WriteString(item)
-				}
-				replyMsg = sb.String()
+				replyMsg = "✅ Tersimpan!"
 			}
 		}
 
-		// 4. Kirim Balasan ke PushWa (API Kirim Pesan)
-		if replyMsg != "" {
-			dataKirim := model.PushWaSend{
-				Token:   profile.Token,
-				Target:  msg.From,
-				Type:    "text",
-				Delay:   "1",
-				Message: replyMsg,
+	// --- B. FITUR LIST ---
+	} else if pesanLower == "list" || pesanLower == "menu" {
+		filter := bson.M{"user_phone": msg.From}
+		notes, err := atdb.GetAllDoc[[]model.Note](config.Mongoconn, "notes", filter)
+		
+		if err != nil || len(notes) == 0 {
+			replyMsg = "📭 Belum ada catatan. Yuk ketik 'simpan [sesuatu]'"
+		} else {
+			var sb strings.Builder
+			sb.WriteString("📂 *Daftar Catatan Kamu:*\n\n")
+			for i, note := range notes {
+				item := fmt.Sprintf("%d. %s\n", i+1, note.Content)
+				sb.WriteString(item)
 			}
-			// Gunakan fungsi PostJSON yang baru kita buat
-			go atapi.PostJSON[interface{}](dataKirim, profile.URLApi)
+			replyMsg = sb.String()
 		}
+	} else {
+        // Balasan default (opsional, untuk memastikan bot hidup)
+        // replyMsg = "Halo! Ketik 'simpan [isi]' atau 'list'." 
+    }
+
+	// 4. Kirim Balasan ke API PushWa (Tanpa 'go' agar Vercel menunggu)
+	if replyMsg != "" {
+		fmt.Println("Mengirim balasan ke:", msg.From)
+		kirim := model.PushWaSend{
+			Token:   profile.Token,
+			Target:  msg.From, // Balas ke nomor pengirim
+			Type:    "text",
+			Delay:   "1",
+			Message: replyMsg,
+		}
+		// Kirim POST ke PushWa
+		atapi.PostJSON[interface{}](kirim, profile.URLApi)
 	}
 
 	json.NewEncoder(w).Encode(model.Response{Response: "OK"})
