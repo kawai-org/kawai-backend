@@ -21,13 +21,11 @@ func TestPostInboxNomorSimpan(t *testing.T) {
 	}
 	config.Mongoconn, _ = atdb.MongoConnect(mconn)
 
-	// 2. GANTI MENGGUNAKAN FORMAT PUSHWA (PushWaIncoming)
+	// 2. GANTI MENGGUNAKAN FORMAT PUSHWA (PushWaIncoming) YANG SUDAH DI-UPDATE
+	// Hapus PushName, Type, Timestamp karena struct di model/wa.go sudah kita sederhanakan
 	msg := model.PushWaIncoming{
-		From:      "628123456789", // PushWa pakai "From", bukan "Phone"
-		Message:   "simpan Beli buku baru",
-		PushName:  "Tester",
-		Type:      "text",
-		Timestamp: 12345678,
+		From:    "628123456789", 
+		Message: "simpan Beli buku baru",
 	}
 	body, _ := json.Marshal(msg)
 
@@ -45,7 +43,7 @@ func TestPostInboxNomorSimpan(t *testing.T) {
 	var response model.Response
 	json.Unmarshal(rr.Body.Bytes(), &response)
 
-	// Cek respon "OK" (karena balasan chat dikirim via API call terpisah/goroutine)
+	// Cek respon "OK"
 	if rr.Code == http.StatusOK && !strings.Contains(response.Response, "OK") {
 		t.Errorf("Respon salah, dapat: %v", response.Response)
 	}

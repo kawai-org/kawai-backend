@@ -37,7 +37,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debugging Log: Cek apakah data masuk
+	// Debugging Log: Cek apakah data masuk di Logs Vercel
 	fmt.Printf("Pesan Masuk: Dari=%s, Isi=%s\n", msg.From, msg.Message)
 
 	// Validasi: Pastikan pengirim dan pesan ada
@@ -62,11 +62,13 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	// --- A. FITUR SIMPAN ---
 	if strings.HasPrefix(pesanLower, "simpan") || strings.HasPrefix(pesanLower, "catat") {
 		keyword := "simpan"
-		if strings.HasPrefix(pesanLower, "catat") { keyword = "catat" }
-		
+		if strings.HasPrefix(pesanLower, "catat") {
+			keyword = "catat"
+		}
+
 		// Ambil isi setelah kata kunci
 		content := strings.TrimSpace(pesan[len(keyword):])
-		
+
 		if content == "" {
 			replyMsg = "Isi catatannya kosong bos. Coba: 'simpan beli beras'"
 		} else {
@@ -87,11 +89,11 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-	// --- B. FITUR LIST ---
+		// --- B. FITUR LIST ---
 	} else if pesanLower == "list" || pesanLower == "menu" {
 		filter := bson.M{"user_phone": msg.From}
 		notes, err := atdb.GetAllDoc[[]model.Note](config.Mongoconn, "notes", filter)
-		
+
 		if err != nil || len(notes) == 0 {
 			replyMsg = "📭 Belum ada catatan. Yuk ketik 'simpan [sesuatu]'"
 		} else {
@@ -104,11 +106,12 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			replyMsg = sb.String()
 		}
 	} else {
-        // Balasan default (opsional, untuk memastikan bot hidup)
-        // replyMsg = "Halo! Ketik 'simpan [isi]' atau 'list'." 
-    }
+		// Opsional: Balasan default jika tidak mengerti perintah
+		// replyMsg = "Halo! Ketik 'simpan [isi]' atau 'list'."
+	}
 
-	// 4. Kirim Balasan ke API PushWa (Tanpa 'go' agar Vercel menunggu)
+	// 4. Kirim Balasan ke API PushWa
+	// PENTING: Jangan pakai 'go' routine agar Vercel menunggu request selesai
 	if replyMsg != "" {
 		fmt.Println("Mengirim balasan ke:", msg.From)
 		kirim := model.PushWaSend{
@@ -118,7 +121,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			Delay:   "1",
 			Message: replyMsg,
 		}
-		// Kirim POST ke PushWa
+		// Kirim POST ke PushWa (Fungsi ini harus ada di helper/atapi)
 		atapi.PostJSON[interface{}](kirim, profile.URLApi)
 	}
 
