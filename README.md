@@ -5,4 +5,4 @@
 ![Build](https://img.shields.io/badge/Build-Passing-brightgreen)
 ![MongoDB](https://img.shields.io/badge/Database-MongoDB-green)
 
-Proyek ini adalah backend untuk Kawai Assistant yang mengelola catatan dan pengingat via WhatsApp.
+Proyek ini adalah backend untuk Kawai Assistant yang mengelola catatan dan pengingat via WhatsApp..
