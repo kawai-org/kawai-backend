@@ -29,22 +29,7 @@ func GetHome(respw http.ResponseWriter, req *http.Request) {
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// --- 1. LOGIKA URL PARAMETER ---
-	pathNomor := strings.TrimPrefix(r.URL.Path, "/webhook/nomor/")
-	if pathNomor == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(model.Response{Response: "URL Salah: Nomor tidak ditemukan"})
-		return
-	}
-
-	// --- 2. CEK SECRET ---
-	secret := r.Header.Get("secret")
-	if secret == "" {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(model.Response{Response: "Secret Kosong"})
-		return
-	}
-
+	// 1. Ambil Profile & Token dari Database
 	profile, err := atdb.GetOneDoc[model.Profile](config.Mongoconn, "profile", bson.M{})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -52,43 +37,41 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if secret != profile.Secret {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(model.Response{Response: "Secret Salah"})
-		return
-	}
-
-	// --- 3. DECODE PESAN ---
-	var msg model.WAMessage
+	// 2. Decode Pesan Masuk (Format PushWa)
+	var msg model.PushWaIncoming
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	// --- 4. LOGIKA BOT ---
-	if !msg.Is_group {
+	// Validasi sederhana: Pastikan pesan tidak kosong
+	if msg.Message == "" {
+		json.NewEncoder(w).Encode(model.Response{Response: "Pesan kosong / Format salah"})
+		return
+	}
+
+	// 3. Logika Bot
+	// (PushWa kadang kirim pesan group juga, kita filter jika perlu)
+	if !msg.IsGroup { 
 		pesan := strings.TrimSpace(msg.Message)
 		pesanLower := strings.ToLower(pesan)
 		var replyMsg string
 
-		// A. FITUR SIMPAN CATATAN
+		// A. FITUR SIMPAN
 		if strings.HasPrefix(pesanLower, "simpan") || strings.HasPrefix(pesanLower, "catat") {
-			// Hapus kata perintah di depan
 			keyword := "simpan"
 			if strings.HasPrefix(pesanLower, "catat") {
 				keyword = "catat"
 			}
-			// Ambil isi konten (substring setelah keyword)
-			// Menggunakan len(keyword) agar akurat memotongnya
+			
 			if len(pesan) <= len(keyword) {
 				replyMsg = "Isi catatannya kosong. Coba: 'simpan beli beras'"
 			} else {
 				content := strings.TrimSpace(pesan[len(keyword):])
-				
 				if content == "" {
-					replyMsg = "Isi catatannya kosong bos."
+					replyMsg = "Isi kosong."
 				} else {
-					// Buat Judul Otomatis (20 Karakter pertama + "...")
+					// Judul Otomatis
 					title := "Catatan"
 					if len(content) > 20 {
 						title = content[:20] + "..."
@@ -96,7 +79,6 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 						title = content
 					}
 
-					// Cek Tipe (Text atau Link)
 					noteType := "text"
 					if strings.Contains(content, "http") {
 						noteType = "link"
@@ -104,7 +86,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 
 					newNote := model.Note{
 						ID:        primitive.NewObjectID(),
-						UserPhone: msg.Phone_number,
+						UserPhone: msg.From, // PushWa pakai "from"
 						Title:     title,
 						Content:   content,
 						Type:      noteType,
@@ -113,61 +95,46 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					
 					_, err := atdb.InsertNote(newNote)
 					if err != nil {
-						replyMsg = "Gagal menyimpan ke database 😢"
+						replyMsg = "Gagal menyimpan database 😢"
 					} else {
 						replyMsg = "✅ Tersimpan! (" + noteType + ")"
 					}
 				}
 			}
 
-		// B. FITUR TAMPILKAN LIST
-		} else if pesanLower == "list" || pesanLower == "tampilkan" || pesanLower == "catatan" {
-			filter := bson.M{"user_phone": msg.Phone_number}
-			// Mengambil semua catatan user
+		// B. FITUR LIST
+		} else if pesanLower == "list" || pesanLower == "menu" {
+			filter := bson.M{"user_phone": msg.From}
 			notes, err := atdb.GetAllDoc[[]model.Note](config.Mongoconn, "notes", filter)
 
 			if err != nil || len(notes) == 0 {
-				replyMsg = "📭 Kamu belum punya catatan. Yuk ketik 'simpan [sesuatu]'"
+				replyMsg = "📭 Belum ada catatan. Ketik 'simpan [isi]'."
 			} else {
 				var sb strings.Builder
-				sb.WriteString("📂 *Daftar Catatan Kamu:*\n\n")
-				
+				sb.WriteString("📂 *Catatan Kamu:*\n\n")
 				for i, note := range notes {
-					// Format Tampilan: 1. [Judul] (Type)
 					icon := "📝"
-					if note.Type == "link" {
-						icon = "🔗"
-					}
-					// Ambil cuplikan isi
+					if note.Type == "link" { icon = "🔗" }
 					preview := note.Content
-					if len(preview) > 30 {
-						preview = preview[:30] + "..."
-					}
-					
+					if len(preview) > 30 { preview = preview[:30] + "..." }
 					item := fmt.Sprintf("%d. *%s* %s\n   _%s_\n", i+1, note.Title, icon, preview)
 					sb.WriteString(item)
 				}
-				sb.WriteString("\nKetik 'simpan' untuk menambah lagi.")
 				replyMsg = sb.String()
 			}
-
-		// C. MENU DEFAULT
-		} else if pesanLower == "halo" || pesanLower == "menu" {
-			replyMsg = "Halo! Saya Kawai Bot 🤖.\n\nPerintah:\n- *simpan [isi]* : Mencatat sesuatu\n- *list* : Lihat semua catatan"
-		} else {
-			// Diam saja jika perintah tidak dikenal, atau balas default (opsional)
-			return
 		}
 
-		// Kirim Balasan ke API WhatsAuth
+		// 4. Kirim Balasan ke PushWa (API Kirim Pesan)
 		if replyMsg != "" {
-			dt := model.TextMessage{
-				To:       msg.Chat_number,
-				IsGroup:  false,
-				Messages: replyMsg,
+			dataKirim := model.PushWaSend{
+				Token:   profile.Token,
+				Target:  msg.From,
+				Type:    "text",
+				Delay:   "1",
+				Message: replyMsg,
 			}
-			// Pastikan pakai Goroutine agar tidak blocking (opsional tapi disarankan)
-			go atapi.PostStructWithToken[model.Response]("Token", profile.Token, dt, profile.URLApiText)
+			// Gunakan fungsi PostJSON yang baru kita buat
+			go atapi.PostJSON[interface{}](dataKirim, profile.URLApi)
 		}
 	}
 

@@ -8,6 +8,32 @@ import (
 	"net/http"
 )
 
+// PostJSON mengirim request POST dengan body JSON standar (Token ada di dalam body)
+func PostJSON[T any](structname interface{}, urltarget string) (statusCode int, result T, err error) {
+	client := http.Client{}
+	mJson, _ := json.Marshal(structname)
+	req, err := http.NewRequest("POST", urltarget, bytes.NewBuffer(mJson))
+	if err != nil {
+		return
+	}
+	req.Header.Add("Content-Type", "application/json")
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	statusCode = resp.StatusCode
+	defer resp.Body.Close()
+	
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	// Coba decode response, tapi jangan error kalau formatnya beda (biar fleksibel)
+	json.Unmarshal(respBody, &result) 
+	return
+}
+
 func PostStructWithToken[T any](tokenkey string, tokenvalue string, structname interface{}, urltarget string) (statusCode int, result T, err error) {
 	client := http.Client{}
 	mJson, _ := json.Marshal(structname)

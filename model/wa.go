@@ -2,63 +2,37 @@ package model
 
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
-// 1. Header untuk validasi secret
-type Header struct {
-	Secret string `reqHeader:"secret,omitempty"`
+// 1. Struktur Pesan Masuk dari PushWa (Webhook)
+// PushWa biasanya mengirim data dengan format ini
+type PushWaIncoming struct {
+	From      string `json:"from"`      // Nomor pengirim (e.g., 628xxx)
+	Message   string `json:"message"`   // Isi pesan
+	PushName  string `json:"pushname"`  // Nama kontak WA
+	Type      string `json:"type"`      // Teks, image, dll
+	Timestamp int64  `json:"timestamp"` // Waktu kirim
+	IsGroup   bool   `json:"is_group,omitempty"` // Opsional, tergantung versi PushWa
 }
 
-// 2. Body Pesan Masuk (Webhook)
-type WAMessage struct {
-	Phone_number       string  `json:"phone_number,omitempty" bson:"phone_number,omitempty"`
-	Reply_phone_number string  `json:"reply_phone_number,omitempty" bson:"reply_phone_number,omitempty"`
-	Chat_number        string  `json:"chat_number,omitempty" bson:"chat_number,omitempty"`
-	Chat_server        string  `json:"chat_server,omitempty" bson:"chat_server,omitempty"`
-	Group_name         string  `json:"group_name,omitempty" bson:"group_name,omitempty"`
-	Group_id           string  `json:"group_id,omitempty" bson:"group_id,omitempty"`
-	Group              string  `json:"group,omitempty" bson:"group,omitempty"`
-	Alias_name         string  `json:"alias_name,omitempty" bson:"alias_name,omitempty"`
-	Message            string  `json:"messages,omitempty" bson:"messages,omitempty"`
-	Is_group           bool    `json:"is_group,omitempty" bson:"is_group,omitempty"`
-	Filename           string  `json:"filename,omitempty" bson:"filename,omitempty"`
-	Filedata           string  `json:"filedata,omitempty" bson:"filedata,omitempty"`
+// 2. Struktur untuk Mengirim Pesan (API Send)
+// Dokumentasi PushWa mewajibkan Token ada di dalam Body
+type PushWaSend struct {
+	Token   string `json:"token"`
+	Target  string `json:"target"`  // Nomor tujuan
+	Type    string `json:"type"`    // "text"
+	Delay   string `json:"delay"`   // "1" (detik)
+	Message string `json:"message"` // Isi pesan
 }
 
-// 3. Response API (Standar Balasan ke Server WhatsAuth)
+// 3. Response sederhana
 type Response struct {
 	Response string `json:"response"`
 }
 
-// 4. Pesan Keluar: TEKS
-type TextMessage struct {
-	To       string `json:"to"`
-	IsGroup  bool   `json:"isgroup"`
-	Messages string `json:"messages"`
-}
-
-// 5. Pesan Keluar: DOKUMEN 
-type DocumentMessage struct {
-	To        string `json:"to"`
-	Base64Doc string `json:"base64doc"`
-	Filename  string `json:"filename,omitempty"`
-	Caption   string `json:"caption,omitempty"`
-	IsGroup   bool   `json:"isgroup,omitempty"`
-}
-
-// 6. Pesan Keluar: GAMBAR 
-type ImageMessage struct {
-	To          string `json:"to"`
-	Base64Image string `json:"base64image"`
-	Caption     string `json:"caption,omitempty"`
-	IsGroup     bool   `json:"isgroup,omitempty"`
-}
-
-// 7. Profile Database (Penting untuk Controller ambil Token)
+// 4. Profile Database (Update struktur agar sesuai kebutuhan)
 type Profile struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Token       string             `bson:"token" json:"token"`
 	Phonenumber string             `bson:"phonenumber" json:"phonenumber"`
-	Secret      string             `bson:"secret" json:"secret"`
-	URL         string             `bson:"url" json:"url"`
-	URLApiText  string             `bson:"urlapitext" json:"urlapitext"`
-	BotName     string             `bson:"botname" json:"botname"`
+	URLApi      string             `bson:"urlapi" json:"urlapi"` // https://dash.pushwa.com/api/kirimPesan
+	Secret      string             `bson:"secret" json:"secret"` // (Opsional jika PushWa support webhook secret)
 }

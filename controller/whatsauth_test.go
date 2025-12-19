@@ -21,35 +21,31 @@ func TestPostInboxNomorSimpan(t *testing.T) {
 	}
 	config.Mongoconn, _ = atdb.MongoConnect(mconn)
 
-	// 2. GANTI IteungMessage MENJADI WAMessage
-	msg := model.WAMessage{
-		Phone_number: "628123456789",
-		Chat_number:  "628123456789", // Perlu chat number untuk balasan
-		Message:      "simpan Beli buku baru",
+	// 2. GANTI MENGGUNAKAN FORMAT PUSHWA (PushWaIncoming)
+	msg := model.PushWaIncoming{
+		From:      "628123456789", // PushWa pakai "From", bukan "Phone"
+		Message:   "simpan Beli buku baru",
+		PushName:  "Tester",
+		Type:      "text",
+		Timestamp: 12345678,
 	}
 	body, _ := json.Marshal(msg)
 
 	req := httptest.NewRequest("POST", "/webhook/nomor/628123456789", bytes.NewBuffer(body))
-	
-	// PENTING: Tambahkan Header Secret Palsu/Asli agar lolos validasi
-	// Pastikan di DB "profile" kamu secretnya sama, atau test ini akan return 403
-	req.Header.Set("secret", "rahasiaKawai123") 
-
 	rr := httptest.NewRecorder()
 
 	// 3. Jalankan Fungsi
 	PostInboxNomor(rr, req)
 
 	// 4. Verifikasi
-	// Jika gagal karena secret, code akan 403. Jika sukses 200.
 	if rr.Code != http.StatusOK {
-		t.Logf("Status code: %d (Mungkin secret di DB tidak cocok dengan 'rahasiaKawai123', abaikan jika ini unit test lokal tanpa DB real)", rr.Code)
+		t.Logf("Status code: %d", rr.Code)
 	}
 
 	var response model.Response
 	json.Unmarshal(rr.Body.Bytes(), &response)
 
-	// Cek respon (hanya jika sukses login)
+	// Cek respon "OK" (karena balasan chat dikirim via API call terpisah/goroutine)
 	if rr.Code == http.StatusOK && !strings.Contains(response.Response, "OK") {
 		t.Errorf("Respon salah, dapat: %v", response.Response)
 	}
