@@ -35,7 +35,7 @@ type TextMessage struct {
 	Messages string `json:"messages"`
 }
 
-// 5. Pesan Keluar: DOKUMEN (Disiapkan untuk nanti)
+// 5. Pesan Keluar: DOKUMEN 
 type DocumentMessage struct {
 	To        string `json:"to"`
 	Base64Doc string `json:"base64doc"`
@@ -44,7 +44,7 @@ type DocumentMessage struct {
 	IsGroup   bool   `json:"isgroup,omitempty"`
 }
 
-// 6. Pesan Keluar: GAMBAR (Disiapkan untuk nanti)
+// 6. Pesan Keluar: GAMBAR 
 type ImageMessage struct {
 	To          string `json:"to"`
 	Base64Image string `json:"base64image"`
