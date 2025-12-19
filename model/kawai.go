@@ -6,69 +6,94 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// 1. Profil Pengguna
+// --- KELOMPOK 1: CORE & USER MANAGEMENT ---
+
+// 1. users: Data pengguna yang berinteraksi
 type User struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Phone     string             `bson:"phone" json:"phone"`
-	Name      string             `bson:"name" json:"name"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	PhoneNumber string             `bson:"phone_number" json:"phone_number"`
+	Name        string             `bson:"name" json:"name"`
+	Role        string             `bson:"role" json:"role"` // "admin", "user"
+	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
+}
+
+// 2. bot_profiles: Konfigurasi Bot (Token PushWa, dll)
+type BotProfile struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Token       string             `bson:"token" json:"token"`
+	Phonenumber string             `bson:"phonenumber" json:"phonenumber"`
+	URLApi      string             `bson:"urlapi" json:"urlapi"`
+	BotName     string             `bson:"botname" json:"botname"`
+}
+
+// 3. message_logs: Audit Trail pesan masuk (Pengganti Inbox)
+type MessageLog struct {
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	From       string             `bson:"from" json:"from"`
+	Message    string             `bson:"message" json:"message"`
+	ReceivedAt time.Time          `bson:"received_at" json:"received_at"`
+}
+
+// 4. error_logs: Menyimpan error sistem untuk debugging
+type ErrorLog struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Context   string             `bson:"context" json:"context"` // misal: "ParsingNote"
+	ErrorMsg  string             `bson:"error_msg" json:"error_msg"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
 
-// 2. Identitas Auth
-type Identity struct {
-	Phone    string `bson:"phone" json:"phone"`
-	Password string `bson:"password" json:"-"`
-}
+// --- KELOMPOK 2: THE BRAIN (CATATAN & RELASI) ---
 
-// 3. Catatan (Notes) - INI FITUR UTAMA KITA SEKARANG
+// 5. notes: Tabel utama catatan
 type Note struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	UserPhone string             `bson:"user_phone" json:"user_phone"`
-	Title     string             `bson:"title" json:"title"`
-	Content   string             `bson:"content" json:"content"` // Isi mentah
-	Type      string             `bson:"type" json:"type"`       // "text" atau "link"
-	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
+	Original  string             `bson:"original" json:"original"` // Pesan asli user
+	Content   string             `bson:"content" json:"content"`   // Pesan bersih tanpa keyword
+	Type      string             `bson:"type" json:"type"`         // "text", "link", "mixed"
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
 
-// 4. Link Tersimpan (Opsional, karena sudah dicover Note, tapi boleh disimpan)
+// 6. links: URL yang diekstrak dari catatan
 type Link struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	UserPhone   string             `bson:"user_phone" json:"user_phone"`
-	URL         string             `bson:"url" json:"url"`
-	Description string             `bson:"description" json:"description"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	NoteID    primitive.ObjectID `bson:"note_id" json:"note_id"` // Relasi ke Note
+	UserPhone string             `bson:"user_phone" json:"user_phone"`
+	URL       string             `bson:"url" json:"url"`
+	Title     string             `bson:"title,omitempty" json:"title,omitempty"`
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
 
-// 5. Struktur Pendukung Google Calendar (SimpleEvent & CredentialRecord)
-// Kita simpan di sini agar helper/gcallapi tidak error
-type SimpleEvent struct {
-	Summary     string     `json:"summary" bson:"summary"`
-	Location    string     `json:"location" bson:"location"`
-	Description string     `json:"description" bson:"description"`
-	Date        string     `json:"date" bson:"date"`
-	TimeStart   string     `json:"timestart" bson:"timestart"`
-	TimeEnd     string     `json:"timeend" bson:"timeend"`
-	Attendees   []string   `json:"attendees" bson:"attendees"`
-	Attachments []FileMeta `json:"attachments" bson:"attachments"`
+// 7. tags: Hashtag yang diekstrak (misal: #penting)
+type Tag struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	NoteID    primitive.ObjectID `bson:"note_id" json:"note_id"` // Relasi ke Note
+	TagName   string             `bson:"tag_name" json:"tag_name"`
+	UserPhone string             `bson:"user_phone" json:"user_phone"`
 }
 
+// 8. categories: Lookup kategori (Opsional, untuk pengembangan dashboard)
+type Category struct {
+	ID   primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	Name string             `bson:"name" json:"name"` // "Kuliah", "Kerjaan", "Pribadi"
+}
+
+// --- KELOMPOK 3: GOOGLE CALENDAR PREP ---
+
+// 9. reminders: Data pengingat lokal sebelum push ke Google
+type Reminder struct {
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	UserPhone     string             `bson:"user_phone" json:"user_phone"`
+	Title         string             `bson:"title" json:"title"`
+	ScheduledTime time.Time          `bson:"scheduled_time" json:"scheduled_time"`
+	Status        string             `bson:"status" json:"status"` // "pending", "synced"
+}
+
+// 10. google_creds: Token OAuth User
 type CredentialRecord struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty"`
-	ClientID     string             `bson:"client_id"`
-	ClientSecret string             `bson:"client_secret"`
-	Scopes       []string           `bson:"scopes"`
-	AuthURI      string             `bson:"auth_uri"`
-	TokenURI     string             `bson:"token_uri"`
-	RedirectURIs []string           `bson:"redirect_uris"`
-	Token        string             `bson:"token"`
+	UserPhone    string             `bson:"user_phone"` // Relasi ke User
+	AccessToken  string             `bson:"access_token"`
 	RefreshToken string             `bson:"refresh_token"`
 	Expiry       time.Time          `bson:"expiry"`
-}
-
-type FileMeta struct {
-	UserPhone string `bson:"user_phone" json:"user_phone"`
-	FileName  string `bson:"file_name" json:"file_name"`
-	FileID    string `bson:"file_id" json:"file_id"`
-	FileUrl   string `bson:"file_url" json:"file_url"`
-	MimeType  string `bson:"mime_type" json:"mime_type"`
-	Title     string `bson:"title" json:"title"`
 }
