@@ -198,10 +198,10 @@ func ParseNaturalTime(text string) (time.Time, string) {
 	// 7. BERSIHKAN JUDUL
 	trashWords := []string{
 		"ingatkan", "remind", "ingat", "catat",
-		"pada", "hari", "hri", "tgl", "tanggal", "tgll", 
+		"pada", "pd",  "hari", "hri", "tgl", "tanggal", "tgll", 
 		"besok", "bsk", "bsok", "lusa", "lsa", 
 		"jam", "jm", "pukul", "pkl", 
-		"nanti", "nt", "lagi", "lg", "siang", "sore", "malam", "pagi",
+		"nanti", "nt","nnt", "lagi", "lg", "siang", "sore", "malam", "pagi", "pg", "mlm", "mnt", "dtk",
 	}
 	cleanTitle := cleanText(text, trashWords)
 	return targetTime, cleanTitle
