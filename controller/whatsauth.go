@@ -13,7 +13,7 @@ import (
 	"github.com/kawai-org/kawai-backend/config"
 	"github.com/kawai-org/kawai-backend/helper/atapi"
 	"github.com/kawai-org/kawai-backend/helper/atdb"
-	"github.com/kawai-org/kawai-backend/helper/gdrive" 
+	"github.com/kawai-org/kawai-backend/helper/gdrive"
 	"github.com/kawai-org/kawai-backend/helper/timeparse"
 	"github.com/kawai-org/kawai-backend/model"
 	"go.mongodb.org/mongo-driver/bson"
@@ -292,12 +292,12 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		scheduledTime, title := timeparse.ParseNaturalTime(pesan)
 		
 		if scheduledTime.IsZero() {
-			replyMsg = "🤔 *Waduh, saya kurang paham waktunya.*
+			replyMsg = `🤔 *Waduh, saya kurang paham waktunya.*
 Coba ketik waktu yang jelas ya, contohnya:
 - _Besok jam 9_ (atau _Bsk jm 9_)
 - _5 menit lagi_ (atau _5 mnt lg_)
 - _Tgl 17 Agustus_
-- _Hari Senin_"
+- _Hari Senin_`
 		} else if scheduledTime.Before(time.Now()) {
 			replyMsg = "⚠️ Waktu sudah lewat."
 		} else {
