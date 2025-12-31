@@ -57,10 +57,23 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Audit Log (Tetap simpan history)
+	// ==========================================
+	// 🔥 PERBAIKAN UTAMA: SANITASI NOMOR HP
+	// ==========================================
+	// Kita ambil nomor HP bersih (buang @s.whatsapp.net jika ada)
+	// Gunakan variabel 'sender' ini untuk semua logika di bawah!
+	sender := msg.From
+	if strings.Contains(sender, "@") {
+		sender = strings.Split(sender, "@")[0]
+	}
+
+	// Debugging: Lihat perbedaan nomor asli vs nomor bersih di Logs Vercel
+	fmt.Printf("Raw From: %s | Clean Sender: %s | Pesan: %s\n", msg.From, sender, msg.Message)
+
+	// 2. Audit Log (Gunakan sender bersih)
 	atdb.InsertOneDoc(config.Mongoconn, "message_logs", model.MessageLog{
 		ID:         primitive.NewObjectID(),
-		From:       msg.From,
+		From:       sender, // Pakai sender bersih
 		Message:    msg.Message,
 		ReceivedAt: time.Now(),
 	})
@@ -73,7 +86,6 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	var replyMsg string
 
 	// Cek apakah pesan HANYA ANGKA? (Fitur Shortcut Detail)
-	// Contoh user ketik: "1", "5"
 	targetNo, errNum := strconv.Atoi(pesan)
 	isNumberOnly := errNum == nil && targetNo > 0
 
@@ -98,56 +110,48 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// Insert Note
+			// Insert Note (Pakai sender bersih)
 			noteID := primitive.NewObjectID()
 			atdb.InsertOneDoc(config.Mongoconn, "notes", model.Note{
 				ID:        noteID,
-				UserPhone: msg.From,
+				UserPhone: sender, // FIX: Pakai sender bersih
 				Original:  pesan,
 				Content:   content,
 				Type:      noteType,
 				CreatedAt: time.Now(),
 			})
 
-			// Insert Link (Dengan Logic Judul)
+			// Insert Link
 			if foundURL != "" {
-				// Logika Judul: Jika user cuma kirim link, judul = URL-nya
 				linkTitle := content
-				// Bersihkan URL dari judul agar judulnya teks biasa (opsional, tapi bagus)
-				// linkTitle = strings.Replace(linkTitle, foundURL, "", 1)
-				// linkTitle = strings.TrimSpace(linkTitle)
-				
-				// Fallback: Jika kosong (user cuma kirim URL), pakai URL sebagai judul
 				if linkTitle == "" || linkTitle == foundURL {
 					linkTitle = foundURL
 				}
-				// Potong kalau kepanjangan
 				if len(linkTitle) > 50 { linkTitle = linkTitle[:50] + "..." }
 
 				atdb.InsertOneDoc(config.Mongoconn, "links", model.Link{
 					ID:        primitive.NewObjectID(),
 					NoteID:    noteID,
-					UserPhone: msg.From,
+					UserPhone: sender, // FIX: Pakai sender bersih
 					URL:       foundURL,
 					Title:     linkTitle,
 					CreatedAt: time.Now(),
 				})
 			}
 
-			// Insert Tags (Kalau ada aja)
+			// Insert Tags
 			if len(foundTags) > 0 {
 				for _, t := range foundTags {
 					atdb.InsertOneDoc(config.Mongoconn, "tags", model.Tag{
 						ID:        primitive.NewObjectID(),
 						NoteID:    noteID,
 						TagName:   t,
-						UserPhone: msg.From,
+						UserPhone: sender, // FIX: Pakai sender bersih
 					})
 				}
 			}
 
 			replyMsg = fmt.Sprintf("✅ Tersimpan!\n\n💡 *Tips:* Ketik *List* untuk melihat catatanmu.")
-			// Edukasi user kalau dia cuma kirim Link polosan
 			if noteType == "link" {
 				replyMsg += "\n(Lain kali, tambahkan judul biar gak lupa ya. Contoh: *Catat Link Zoom https://...*)"
 			}
@@ -160,9 +164,9 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	// B. FITUR LIST (List & List Link)
 	// ==========================================
 	} else if strings.HasPrefix(pesanLower, "list") || strings.HasPrefix(pesanLower, "menu") {
-		filter := bson.M{"user_phone": msg.From}
+		// FIX: Query menggunakan sender bersih
+		filter := bson.M{"user_phone": sender}
 		
-		// Logic Pagination
 		page := 1
 		limit := 10
 		parts := strings.Fields(pesan)
@@ -185,9 +189,8 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				sb.WriteString(fmt.Sprintf("🔗 *Koleksi Link (Hal %d)*\n", page))
 				for i, l := range links {
 					nomor := (page-1)*limit + i + 1
-					// Tampilkan Judul Link
 					judul := l.Title
-					if judul == "" { judul = l.URL } // Fallback
+					if judul == "" { judul = l.URL }
 					
 					sb.WriteString(fmt.Sprintf("\n%d. *%s*\n   %s", nomor, judul, l.URL))
 				}
@@ -209,17 +212,14 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				for i, n := range notes {
 					nomor := (page-1)*limit + i + 1
 					
-					// Potong Judul
 					display := n.Content
 					if len(display) > 35 { display = display[:35] + "..." }
 					
-					// Icon
 					icon := "📝"
 					if n.Type == "link" { icon = "🔗" } else if n.Type == "mixed" { icon = "📑" }
 
 					sb.WriteString(fmt.Sprintf("\n%d. %s %s", nomor, icon, display))
 				}
-				// Panduan Singkat yang Enak Dibaca
 				sb.WriteString("\n\n👉 *Ketik nomornya saja* untuk baca detail. (Contoh: ketik *1*)")
 				sb.WriteString(fmt.Sprintf("\n👉 Ketik *List %d* untuk halaman berikutnya.", page+1))
 				replyMsg = sb.String()
@@ -232,10 +232,10 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	// C. FITUR BACA DETAIL (Shortcut Angka)
 	// ==========================================
 	} else if isNumberOnly {
-		// Logika: User ketik "1", kita artikan "Ambil data terbaru ke-1"
 		skip := int64(targetNo - 1)
 		opts := options.FindOne().SetSkip(skip).SetSort(bson.M{"created_at": -1})
-		filter := bson.M{"user_phone": msg.From}
+		// FIX: Query menggunakan sender bersih
+		filter := bson.M{"user_phone": sender}
 
 		var note model.Note
 		errDB := config.Mongoconn.Collection("notes").FindOne(context.TODO(), filter, opts).Decode(&note)
@@ -247,10 +247,9 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			sb.WriteString(fmt.Sprintf("📂 *DETAIL NO. %d*\n", targetNo))
 			sb.WriteString(fmt.Sprintf("📅 %s | Tipe: %s\n", dateStr, note.Type))
 			sb.WriteString("----------------------\n")
-			sb.WriteString(note.Content) // Isi Full
+			sb.WriteString(note.Content) 
 			sb.WriteString("\n----------------------")
 			
-			// Jika ada Link, kasih tombol/info tambahan
 			if note.Type == "link" || note.Type == "mixed" {
 				url := extractURL(note.Content)
 				if url != "" {
@@ -263,7 +262,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		}
 
 	// ==========================================
-	// D. FITUR BANTUAN (ONBOARDING)
+	// D. FITUR BANTUAN
 	// ==========================================
 	} else if strings.HasPrefix(pesanLower, "help") || strings.HasPrefix(pesanLower, "bantuan") || strings.HasPrefix(pesanLower, "halo") || strings.HasPrefix(pesanLower, "info") {
 		replyMsg = `🤖 *Halo! Saya Kawai Assistant.*
@@ -274,24 +273,19 @@ Saya bantu kamu catat hal penting & simpan link biar gak hilang ditelan chat.
    Ketik: _Catat beli gorengan 5 biji_
 2️⃣ *Simpan Link*
    Ketik: _Catat Materi Kuliah https://google.com_
-   _(Sebaiknya kasih judul biar rapi)_
 3️⃣ *Lihat Data*
    Ketik: _List_ atau _List Link_
 4️⃣ *Baca Detail*
    Cukup ketik *Nomor*-nya saja (misal: _1_)
 
 Selamat mencoba! 🚀`
-
-	} else {
-		// Default reply (jika user ngomong random)
-		// replyMsg = "Maaf gak ngerti. Ketik *Help* untuk bantuan."
 	}
 
 	// Kirim Balasan
 	if replyMsg != "" && profile.Token != "" {
 		kirim := model.PushWaSend{
 			Token:   profile.Token,
-			Target:  msg.From,
+			Target:  msg.From, // Target tetap pakai msg.From asli agar sampai
 			Type:    "text",
 			Delay:   "1",
 			Message: replyMsg,
