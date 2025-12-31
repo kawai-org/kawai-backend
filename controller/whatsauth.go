@@ -13,6 +13,7 @@ import (
 	"github.com/kawai-org/kawai-backend/config"
 	"github.com/kawai-org/kawai-backend/helper/atapi"
 	"github.com/kawai-org/kawai-backend/helper/atdb"
+	"github.com/kawai-org/kawai-backend/helper/timeparse"
 	"github.com/kawai-org/kawai-backend/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -29,6 +30,16 @@ func extractURL(text string) string {
 func extractTags(text string) []string {
 	re := regexp.MustCompile(`#\w+`)
 	return re.FindAllString(text, -1)
+}
+
+// Helper: Cek apakah text diawali salah satu keyword
+func hasPrefixAny(text string, keywords []string) bool {
+	for _, kw := range keywords {
+		if strings.HasPrefix(text, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
@@ -60,25 +71,22 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	// ==========================================
 	// 🔥 PERBAIKAN 1: SANITASI NOMOR HP
 	// ==========================================
-	// Ambil nomor HP bersih (buang @s.whatsapp.net / @lid jika ada)
 	sender := msg.From
 	if strings.Contains(sender, "@") {
 		sender = strings.Split(sender, "@")[0]
 	}
 
 	// ==========================================
-	// 🔥 PERBAIKAN 2: AUTO-SWITCH IDENTITAS (SOLUSI FINAL)
+	// 🔥 PERBAIKAN 2: AUTO-SWITCH IDENTITAS
 	// ==========================================
-	// Jika pesan datang dari ID Laptop (2333...), paksa ubah jadi ID HP Utama (628...).
-	// Tujuannya agar database tetap satu dan sinkron.
 	if sender == "233332956778603" { // ID Laptop
 		sender = "6285793766959"     // ID HP Utama
 	}
 
-	// Debugging: Pastikan 'Final User' sekarang selalu 628...
+	// Debugging
 	fmt.Printf("Raw From: %s | Final User: %s | Pesan: %s\n", msg.From, sender, msg.Message)
 
-	// 2. Audit Log (Tetap simpan history dengan ID yang sudah disatukan)
+	// 2. Audit Log
 	atdb.InsertOneDoc(config.Mongoconn, "message_logs", model.MessageLog{
 		ID:         primitive.NewObjectID(),
 		From:       sender,
@@ -93,14 +101,15 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	pesanLower := strings.ToLower(pesan)
 	var replyMsg string
 
-	// Cek apakah pesan HANYA ANGKA? (Fitur Shortcut Detail)
+	// Cek apakah pesan HANYA ANGKA?
 	targetNo, errNum := strconv.Atoi(pesan)
 	isNumberOnly := errNum == nil && targetNo > 0
 
 	// ==========================================
 	// A. FITUR SIMPAN / CATAT
+	// Keyword: simpan, catat, save
 	// ==========================================
-	if strings.HasPrefix(pesanLower, "simpan") || strings.HasPrefix(pesanLower, "catat") || strings.HasPrefix(pesanLower, "save") {
+	if hasPrefixAny(pesanLower, []string{"simpan", "catat", "save"}) {
 		parts := strings.Fields(pesan)
 		
 		if len(parts) > 1 {
@@ -122,7 +131,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			noteID := primitive.NewObjectID()
 			atdb.InsertOneDoc(config.Mongoconn, "notes", model.Note{
 				ID:        noteID,
-				UserPhone: sender, // Sudah otomatis jadi 628...
+				UserPhone: sender,
 				Original:  pesan,
 				Content:   content,
 				Type:      noteType,
@@ -170,8 +179,9 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 
 	// ==========================================
 	// B. FITUR LIST (List & List Link)
+	// Keyword: list, menu, tampilkan
 	// ==========================================
-	} else if strings.HasPrefix(pesanLower, "list") || strings.HasPrefix(pesanLower, "menu") {
+	} else if hasPrefixAny(pesanLower, []string{"list", "menu", "tampilkan"}) {
 		filter := bson.M{"user_phone": sender}
 		
 		page := 1
@@ -268,21 +278,68 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		}
 
 	// ==========================================
-	// D. FITUR BANTUAN
+	// D. FITUR PENGINGAT (REMINDER)
+	// Keyword: ingatkan, remind
 	// ==========================================
-	} else if strings.HasPrefix(pesanLower, "help") || strings.HasPrefix(pesanLower, "bantuan") || strings.HasPrefix(pesanLower, "halo") || strings.HasPrefix(pesanLower, "info") {
-		replyMsg = `🤖 *Halo! Saya Kawai Assistant.*
-Saya bantu kamu catat hal penting & simpan link biar gak hilang ditelan chat.
+	} else if hasPrefixAny(pesanLower, []string{"ingatkan", "remind", "ingat", "ing", "ingt", "rmd", "reminder"}) {
+		// Panggil Helper Parsing Waktu
+		scheduledTime, title := timeparse.ParseNaturalTime(pesan)
+		
+		if scheduledTime.IsZero() {
+			replyMsg = `🤔 *Waduh, saya kurang paham waktunya.*
+Coba ketik waktu yang jelas ya, contohnya:
+- _Besok jam 9_ (atau _Bsk jm 9_)
+- _5 menit lagi_ (atau _5 mnt lg_)
+- _Tgl 17 Agustus_
+- _Hari Senin_`
+		} else if scheduledTime.Before(time.Now().Add(-1 * time.Minute)) {
+			// Validasi Waktu
+			replyMsg = "⚠️ Waktu sudah terlewat bos. Coba waktu yang akan datang."
+		} else {
+			// Simpan ke Database
+			newReminder := model.Reminder{
+				ID:            primitive.NewObjectID(),
+				UserPhone:     sender,
+				Title:         title,
+				ScheduledTime: scheduledTime,
+				Status:        "pending",
+			}
+			atdb.InsertOneDoc(config.Mongoconn, "reminders", newReminder)
 
-*Cara Pakai:*
-1️⃣ *Simpan Catatan*
-   Ketik: _Catat beli gorengan 5 biji_
-2️⃣ *Simpan Link*
-   Ketik: _Catat Materi Kuliah https://google.com_
-3️⃣ *Lihat Data*
-   Ketik: _List_ atau _List Link_
-4️⃣ *Baca Detail*
-   Cukup ketik *Nomor*-nya saja (misal: _1_)
+			// Feedback
+			timeStr := scheduledTime.Format("Monday, 02 Jan • 15:04 WIB")
+			replyMsg = fmt.Sprintf("⏰ *Siap! Pengingat Diset.*\n\n📌 Topik: %s\n⏳ Waktu: %s\n\n_Saya akan ingatkan di WA ini._", title, timeStr)
+		}
+
+	// ==========================================
+	// E. FITUR BANTUAN (HELP)
+	// Keyword: help, info, halo, dll
+	// ==========================================
+	} else if hasPrefixAny(pesanLower, []string{"help", "bantuan", "halo", "hai", "hi", "p", "info"}) {
+		replyMsg = `🤖 *Kawai Assistant Menu*
+_Asisten pribadi untuk Catat & Ingat._
+
+1️⃣ *SIMPAN CATATAN*
+   Keyword: _Catat, Simpan, Save_
+   👉 _Catat ide skripsi bab 1_
+   👉 _Simpan Link Zoom https://zoom.us_
+
+2️⃣ *LIHAT DATA*
+   Keyword: _List, Menu_
+   👉 _List_ (Lihat semua)
+   👉 _List Link_ (Khusus link)
+
+3️⃣ *BACA DETAIL*
+   Keyword: _(Ketik Nomornya Saja)_
+   👉 _1_ (Untuk baca no 1)
+
+4️⃣ *PENGINGAT JADWAL*
+   Keyword: _Ingatkan, Ingat, Remind_
+   ✅ _Ingatkan Rapat Besok jam 10_
+   ✅ _Ingat bayar UKT Lusa_
+   ✅ _Ingatkan tgl 17 Agustus_
+   ✅ _Ingatkan masak mie 5 menit lagi_
+   _(Bisa disingkat: bsk, jm, tgl, lg)_
 
 Selamat mencoba! 🚀`
 	}
@@ -291,7 +348,7 @@ Selamat mencoba! 🚀`
 	if replyMsg != "" && profile.Token != "" {
 		kirim := model.PushWaSend{
 			Token:   profile.Token,
-			Target:  msg.From, // Target tetap msg.From asli agar sampai ke device yang benar
+			Target:  msg.From,
 			Type:    "text",
 			Delay:   "1",
 			Message: replyMsg,
