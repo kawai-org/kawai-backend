@@ -58,22 +58,30 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ==========================================
-	// 🔥 PERBAIKAN UTAMA: SANITASI NOMOR HP
+	// 🔥 PERBAIKAN 1: SANITASI NOMOR HP
 	// ==========================================
-	// Kita ambil nomor HP bersih (buang @s.whatsapp.net jika ada)
-	// Gunakan variabel 'sender' ini untuk semua logika di bawah!
+	// Ambil nomor HP bersih (buang @s.whatsapp.net / @lid jika ada)
 	sender := msg.From
 	if strings.Contains(sender, "@") {
 		sender = strings.Split(sender, "@")[0]
 	}
 
-	// Debugging: Lihat perbedaan nomor asli vs nomor bersih di Logs Vercel
-	fmt.Printf("Raw From: %s | Clean Sender: %s | Pesan: %s\n", msg.From, sender, msg.Message)
+	// ==========================================
+	// 🔥 PERBAIKAN 2: AUTO-SWITCH IDENTITAS (SOLUSI FINAL)
+	// ==========================================
+	// Jika pesan datang dari ID Laptop (2333...), paksa ubah jadi ID HP Utama (628...).
+	// Tujuannya agar database tetap satu dan sinkron.
+	if sender == "233332956778603" { // ID Laptop
+		sender = "6285793766959"     // ID HP Utama
+	}
 
-	// 2. Audit Log (Gunakan sender bersih)
+	// Debugging: Pastikan 'Final User' sekarang selalu 628...
+	fmt.Printf("Raw From: %s | Final User: %s | Pesan: %s\n", msg.From, sender, msg.Message)
+
+	// 2. Audit Log (Tetap simpan history dengan ID yang sudah disatukan)
 	atdb.InsertOneDoc(config.Mongoconn, "message_logs", model.MessageLog{
 		ID:         primitive.NewObjectID(),
-		From:       sender, // Pakai sender bersih
+		From:       sender,
 		Message:    msg.Message,
 		ReceivedAt: time.Now(),
 	})
@@ -110,11 +118,11 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// Insert Note (Pakai sender bersih)
+			// Insert Note
 			noteID := primitive.NewObjectID()
 			atdb.InsertOneDoc(config.Mongoconn, "notes", model.Note{
 				ID:        noteID,
-				UserPhone: sender, // FIX: Pakai sender bersih
+				UserPhone: sender, // Sudah otomatis jadi 628...
 				Original:  pesan,
 				Content:   content,
 				Type:      noteType,
@@ -132,7 +140,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				atdb.InsertOneDoc(config.Mongoconn, "links", model.Link{
 					ID:        primitive.NewObjectID(),
 					NoteID:    noteID,
-					UserPhone: sender, // FIX: Pakai sender bersih
+					UserPhone: sender,
 					URL:       foundURL,
 					Title:     linkTitle,
 					CreatedAt: time.Now(),
@@ -146,7 +154,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 						ID:        primitive.NewObjectID(),
 						NoteID:    noteID,
 						TagName:   t,
-						UserPhone: sender, // FIX: Pakai sender bersih
+						UserPhone: sender,
 					})
 				}
 			}
@@ -164,7 +172,6 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	// B. FITUR LIST (List & List Link)
 	// ==========================================
 	} else if strings.HasPrefix(pesanLower, "list") || strings.HasPrefix(pesanLower, "menu") {
-		// FIX: Query menggunakan sender bersih
 		filter := bson.M{"user_phone": sender}
 		
 		page := 1
@@ -234,7 +241,6 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	} else if isNumberOnly {
 		skip := int64(targetNo - 1)
 		opts := options.FindOne().SetSkip(skip).SetSort(bson.M{"created_at": -1})
-		// FIX: Query menggunakan sender bersih
 		filter := bson.M{"user_phone": sender}
 
 		var note model.Note
@@ -285,7 +291,7 @@ Selamat mencoba! 🚀`
 	if replyMsg != "" && profile.Token != "" {
 		kirim := model.PushWaSend{
 			Token:   profile.Token,
-			Target:  msg.From, // Target tetap pakai msg.From asli agar sampai
+			Target:  msg.From, // Target tetap msg.From asli agar sampai ke device yang benar
 			Type:    "text",
 			Delay:   "1",
 			Message: replyMsg,
