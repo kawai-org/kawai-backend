@@ -5,26 +5,35 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/joho/godotenv" // Import ini
 	"github.com/kawai-org/kawai-backend/config"
 	"github.com/kawai-org/kawai-backend/helper/atdb"
 	"github.com/kawai-org/kawai-backend/model"
 )
 
 func TestPostInboxNomorSimpan(t *testing.T) {
+	// Load .env (Asumsi file ini di folder controller, mundur 1 langkah)
+	_ = godotenv.Load("../.env")
+
+	mongoString := os.Getenv("MONGOSTRING")
+	if mongoString == "" {
+		t.Fatal("MONGOSTRING tidak ditemukan di .env")
+	}
+
 	// 1. Inisialisasi Database untuk Testing
 	mconn := atdb.DBInfo{
-		DBString: "mongodb+srv://penerbit:u2cC2MwwS42yKxub@webhook.jej9ieu.mongodb.net/?retryWrites=true&w=majority&appName=webhook", 
+		DBString: mongoString, // AMAN
 		DBName:   "kawai_db",
 	}
 	config.Mongoconn, _ = atdb.MongoConnect(mconn)
 
-	// 2. GANTI MENGGUNAKAN FORMAT PUSHWA (PushWaIncoming) YANG SUDAH DI-UPDATE
-	// Hapus PushName, Type, Timestamp karena struct di model/wa.go sudah kita sederhanakan
+	// 2. DATA DUMMY
 	msg := model.PushWaIncoming{
-		From:    "628123456789", 
+		From:    "628123456789",
 		Message: "simpan Beli buku baru",
 	}
 	body, _ := json.Marshal(msg)

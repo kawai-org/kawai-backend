@@ -9,6 +9,7 @@ import (
 )
 
 func URL(w http.ResponseWriter, r *http.Request) {
+	// CORS Config
 	if config.SetAccessControlHeaders(w, r) {
 		return
 	}
@@ -25,6 +26,20 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Route untuk Cron Job (Pengingat Otomatis)
 	case method == "GET" && path == "/api/cron":
 		controller.HandleCron(w, r)
+
+	// Login Google: User diarahkan ke Google
+	case method == "GET" && path == "/api/auth/google/login":
+		controller.GoogleLogin(w, r)
+
+	// Callback Google: Menerima kode dari Google
+	case method == "GET" && path == "/api/auth/google/callback":
+		controller.GoogleCallback(w, r)
+	
+
+	// case method == "POST" && path == "/api/register":
+	// 	controller.Register(w, r)
+	// case method == "POST" && path == "/api/login":
+	// 	controller.Login(w, r)
 
 	// Route Home / Cek Status
 	case method == "GET" && path == "/":

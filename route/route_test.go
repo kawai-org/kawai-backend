@@ -5,17 +5,26 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
+	"github.com/joho/godotenv" // Import ini
 	"github.com/kawai-org/kawai-backend/config"
 	"github.com/kawai-org/kawai-backend/helper/atdb"
 	"github.com/kawai-org/kawai-backend/model"
 )
 
 func TestURL(t *testing.T) {
+	_ = godotenv.Load("../.env")
+
+	mongoString := os.Getenv("MONGOSTRING")
+	if mongoString == "" {
+		t.Fatal("MONGOSTRING tidak ditemukan di .env")
+	}
+
 	// 1. SETUP KONEKSI
 	mconn := atdb.DBInfo{
-		DBString: "mongodb+srv://penerbit:u2cC2MwwS42yKxub@webhook.jej9ieu.mongodb.net/?retryWrites=true&w=majority&appName=webhook", 
+		DBString: mongoString, // AMAN
 		DBName:   "kawai_db",
 	}
 	config.Mongoconn, _ = atdb.MongoConnect(mconn)
