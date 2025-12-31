@@ -335,7 +335,7 @@ Coba ketik waktu yang jelas ya, contohnya:
 _Asisten pribadi untuk Catat & Ingat._
 
 1️⃣ *SIMPAN CATATAN*
-   Keyword: _Catat, Simpan, Save_
+   Keyword: _Catat, Simpan_
    👉 _Catat ide skripsi bab 1_
    👉 _Simpan Link Zoom https://zoom.us_
 
@@ -351,12 +351,11 @@ _Asisten pribadi untuk Catat & Ingat._
 4️⃣ *PENGINGAT JADWAL*
    Keyword: _Ingatkan, Ingat, Remind_
    ✅ _Ingatkan Rapat Besok jam 10_
-   ✅ _Ingat bayar UKT Lusa_
-   ✅ _Ingatkan tgl 17 Agustus_
+   ✅ _Ingat bayar UKT Lusa 09.30_
+   ✅ _Ingatkan tgl 17 Agustus 13:00_
    ✅ _Ingatkan masak mie 5 menit lagi_
-   _(Bisa disingkat: bsk, jm, tgl, lg)_
 
-Selamat mencoba! 🚀`
+Selamat mencoba! 😊`
 	}
 
 	// Kirim Balasan

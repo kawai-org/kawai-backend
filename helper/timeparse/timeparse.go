@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Helper Map untuk Nama Bulan
+// Kamus Bulan
 var monthMap = map[string]time.Month{
 	"januari": 1, "jan": 1, "january": 1,
 	"februari": 2, "feb": 2, "pebruari": 2, "february": 2,
@@ -24,15 +24,15 @@ var monthMap = map[string]time.Month{
 	"desember": 12, "des": 12, "dec": 12, "december": 12,
 }
 
-// Helper Map untuk Nama Hari (Termasuk singkatan chat)
+// Kamus Hari
 var dayMap = map[string]time.Weekday{
-	"minggu": time.Sunday, "ahad": time.Sunday, "mg": time.Sunday, "mgg": time.Sunday, "sun": time.Sunday,
-	"senin": time.Monday, "sen": time.Monday, "sn": time.Monday, "mon": time.Monday,
-	"selasa": time.Tuesday, "sls": time.Tuesday, "slasa": time.Tuesday, "tue": time.Tuesday,
-	"rabu": time.Wednesday, "rab": time.Wednesday, "rb": time.Wednesday, "wed": time.Wednesday,
-	"kamis": time.Thursday, "kam": time.Thursday, "kms": time.Thursday, "thu": time.Thursday,
-	"jumat": time.Friday, "jum'at": time.Friday, "jum": time.Friday, "jmt": time.Friday, "fri": time.Friday,
-	"sabtu": time.Saturday, "sab": time.Saturday, "sbt": time.Saturday, "sat": time.Saturday,
+	"minggu": time.Sunday, "ahad": time.Sunday, "mg": time.Sunday,
+	"senin": time.Monday, "sen": time.Monday, "sn": time.Monday,
+	"selasa": time.Tuesday, "sls": time.Tuesday, "slasa": time.Tuesday,
+	"rabu": time.Wednesday, "rab": time.Wednesday, "rb": time.Wednesday,
+	"kamis": time.Thursday, "kam": time.Thursday, "kms": time.Thursday,
+	"jumat": time.Friday, "jum'at": time.Friday, "jum": time.Friday, "jmt": time.Friday,
+	"sabtu": time.Saturday, "sab": time.Saturday, "sbt": time.Saturday,
 }
 
 func ParseNaturalTime(text string) (time.Time, string) {
@@ -43,10 +43,7 @@ func ParseNaturalTime(text string) (time.Time, string) {
 	
 	isDateSet := false 
 
-	// ==========================================
-	// A. DETEKSI DURASI ("... LAGI")
-	// Support: "5 mnt lg", "sejam lg", "10 dtk lagi"
-	// ==========================================
+	// 1. DETEKSI DURASI ("... LAGI")
 	reDuration := regexp.MustCompile(`(\d+|sebuah|satu|setengah|se)\s*(jam|menit|detik|jm|mnt|dtk)\s*(lagi|lg)?`)
 	matchDur := reDuration.FindStringSubmatch(textLower)
 	
@@ -71,14 +68,11 @@ func ParseNaturalTime(text string) (time.Time, string) {
 			targetTime = targetTime.Add(time.Duration(nilai * float64(time.Second)))
 		}
 		
-		// Daftar kata sampah untuk dibersihkan dari judul
 		sampah := []string{matchDur[0], "ingatkan", "remind", "ingat", "lg", "lagi"}
 		return targetTime, cleanText(text, sampah)
 	}
 
-	// ==========================================
-	// B. DETEKSI TANGGAL FORMAL (25/12)
-	// ==========================================
+	// 2. DETEKSI TANGGAL FORMAL (25/12)
 	reDateFormal := regexp.MustCompile(`(\d{1,2})[-/](\d{1,2})([-./]\d{2,4})?`)
 	matchDate := reDateFormal.FindStringSubmatch(textLower)
 	
@@ -99,9 +93,7 @@ func ParseNaturalTime(text string) (time.Time, string) {
 		textLower = strings.Replace(textLower, matchDate[0], "", 1)
 	}
 
-	// ==========================================
-	// C. DETEKSI TANGGAL TEXT ("17 Agt")
-	// ==========================================
+	// 3. DETEKSI TANGGAL TEKS ("1 Jan")
 	if !isDateSet {
 		for monthName, monthIdx := range monthMap {
 			reTextDate := regexp.MustCompile(fmt.Sprintf(`(tgl|tanggal|tgll)?\s*(\d{1,2})\s*%s`, monthName))
@@ -120,13 +112,10 @@ func ParseNaturalTime(text string) (time.Time, string) {
 		}
 	}
 
-	// ==========================================
-	// D. DETEKSI HARI ("Senin", "Jumat")
-	// ==========================================
+	// 4. DETEKSI HARI ("Rabu")
 	if !isDateSet {
 		for dayName, dayIdx := range dayMap {
-			// Pakai boundary \b agar "senin" tidak match dengan "seninan"
-			if strings.Contains(textLower, dayName) {
+			if regexp.MustCompile(fmt.Sprintf(`\b%s\b`, dayName)).MatchString(textLower) {
 				currentDay := int(now.Weekday())
 				targetDay := int(dayIdx)
 				daysToAdd := (targetDay - currentDay + 7) % 7
@@ -135,73 +124,70 @@ func ParseNaturalTime(text string) (time.Time, string) {
 				isDateSet = true
 				textLower = strings.ReplaceAll(textLower, dayName, "")
 				textLower = strings.ReplaceAll(textLower, "hari", "")
-				textLower = strings.ReplaceAll(textLower, "hri", "")
 				break
 			}
 		}
 	}
 
-	// ==========================================
-	// E. DETEKSI RELATIF ("Bsk", "Lsa", "Tgl 17")
-	// ==========================================
+	// 5. DETEKSI RELATIF ("Besok")
 	if !isDateSet {
 		addedDays := 0
-		// Cek regex Besok/Lusa dan singkatannya
 		if regexp.MustCompile(`\b(besok|bsk|bsok)\b`).MatchString(textLower) {
 			addedDays = 1
 		} else if regexp.MustCompile(`\b(lusa|lsa)\b`).MatchString(textLower) {
 			addedDays = 2
-		} else {
-			reTgl := regexp.MustCompile(`(tgl|tanggal)\s*(\d{1,2})`)
-			matchTgl := reTgl.FindStringSubmatch(textLower)
-			if len(matchTgl) > 0 {
-				day, _ := strconv.Atoi(matchTgl[2])
-				year, month, _ := now.Date()
-				if day < now.Day() { month++ }
-				targetTime = time.Date(year, month, day, targetTime.Hour(), targetTime.Minute(), 0, 0, loc)
-				isDateSet = true
-			}
 		}
-
+		
 		if addedDays > 0 {
 			targetTime = targetTime.AddDate(0, 0, addedDays)
 			isDateSet = true
 		}
 	}
 
-	// ==========================================
-	// F. DETEKSI JAM ("Jam 10", "Pkl 9", "10:30")
-	// ==========================================
-	// Support: jam, jm, pukul, pkl
-	reJam := regexp.MustCompile(`(jam|pukul|pkl|jm)?\s*(\d{1,2})[.:](\d{1,2})`) 
-	reJamSimple := regexp.MustCompile(`(jam|pukul|pkl|jm)\s*(\d{1,2})`)       
+	// 6. DETEKSI JAM (Fleksibel: 13.30, 13:30, 07.00)
+	// Wajib 2 digit menit (\d{2}) agar tidak salah baca angka desimal (1.5)
+	reJamFlexible := regexp.MustCompile(`(jam|pukul|pkl|jm)?\s*(\d{1,2})[:.](\d{2})`) 
 	
-	finalHour := 9
+	finalHour := 9 
 	finalMin := 0
 	foundTime := false
 
-	matchClock := reJam.FindStringSubmatch(textLower)
+	matchClock := reJamFlexible.FindStringSubmatch(textLower)
 	if len(matchClock) > 0 {
-		finalHour, _ = strconv.Atoi(matchClock[2])
-		finalMin, _ = strconv.Atoi(matchClock[3])
-		foundTime = true
-		textLower = strings.Replace(textLower, matchClock[0], "", 1)
+		h, _ := strconv.Atoi(matchClock[2])
+		m, _ := strconv.Atoi(matchClock[3])
+
+		if h >= 0 && h <= 23 && m >= 0 && m <= 59 {
+			finalHour = h
+			finalMin = m
+			foundTime = true
+			textLower = strings.Replace(textLower, matchClock[0], "", 1)
+		}
 	} else {
+		// Cek format "Jam 9" (tanpa menit)
+		reJamSimple := regexp.MustCompile(`(jam|pukul|pkl|jm)\s*(\d{1,2})`)
 		matchSimple := reJamSimple.FindStringSubmatch(textLower)
 		if len(matchSimple) > 0 {
-			finalHour, _ = strconv.Atoi(matchSimple[2])
-			foundTime = true
-			textLower = strings.Replace(textLower, matchSimple[0], "", 1)
+			h, _ := strconv.Atoi(matchSimple[2])
+			if h >= 0 && h <= 23 {
+				finalHour = h
+				foundTime = true
+				textLower = strings.Replace(textLower, matchSimple[0], "", 1)
+			}
 		}
 	}
 
-	if !isDateSet && foundTime && time.Date(now.Year(), now.Month(), now.Day(), finalHour, finalMin, 0, 0, loc).Before(now) {
-		targetTime = targetTime.AddDate(0, 0, 1)
+	// Logika "Besok Otomatis"
+	if !isDateSet && foundTime {
+		tempCheck := time.Date(now.Year(), now.Month(), now.Day(), finalHour, finalMin, 0, 0, loc)
+		if tempCheck.Before(now) {
+			targetTime = targetTime.AddDate(0, 0, 1)
+		}
 	}
 
 	if foundTime || isDateSet {
 		if !foundTime && isDateSet {
-			finalHour = 9
+			finalHour = 9 // Default
 			finalMin = 0
 		}
 		targetTime = time.Date(targetTime.Year(), targetTime.Month(), targetTime.Day(), finalHour, finalMin, 0, 0, loc)
@@ -209,41 +195,34 @@ func ParseNaturalTime(text string) (time.Time, string) {
 		return time.Time{}, ""
 	}
 
-	// ==========================================
-	// G. BERSIHKAN JUDUL (TERMASUK SINGKATAN)
-	// ==========================================
-	// Daftar kata sampah yang harus dibuang dari judul
+	// 7. BERSIHKAN JUDUL
 	trashWords := []string{
-		"ingatkan", "remind", "ingat", 
+		"ingatkan", "remind", "ingat", "catat",
 		"pada", "hari", "hri", "tgl", "tanggal", "tgll", 
 		"besok", "bsk", "bsok", "lusa", "lsa", 
 		"jam", "jm", "pukul", "pkl", 
-		"nanti", "nt", "lagi", "lg",
+		"nanti", "nt", "lagi", "lg", "siang", "sore", "malam", "pagi",
 	}
 	cleanTitle := cleanText(text, trashWords)
 	return targetTime, cleanTitle
 }
 
-// Helper membersihkan kata-kata sampah dari judul
 func cleanText(text string, removeList []string) string {
 	lower := strings.ToLower(text)
 	
-	// 1. Hapus Format Jam Angka (10:30, 09.00)
-	reTime := regexp.MustCompile(`\d{1,2}[:.]\d{1,2}`)
+	// Hapus format jam angka (13.30, 13:30)
+	reTime := regexp.MustCompile(`\d{1,2}[:.]\d{2}`)
 	lower = reTime.ReplaceAllString(lower, "")
 	
-	// 2. Hapus Pola "Jam X", "Pkl X" (Termasuk angkanya)
-	// Ini yang memperbaiki bug "Rapat 9" -> Menghapus "jm 9" sekaligus
-	reJamFull := regexp.MustCompile(`\b(jam|jm|pukul|pkl)\s*\d{1,2}\b`)
-	lower = reJamFull.ReplaceAllString(lower, "")
+	// Hapus format "Jam 9"
+	reJamOnly := regexp.MustCompile(`(jam|pukul|pkl|jm)\s*\d{1,2}`)
+	lower = reJamOnly.ReplaceAllString(lower, "")
 
-	// 3. Hapus Keyword Sampah
 	for _, word := range removeList {
 		re := regexp.MustCompile(fmt.Sprintf(`\b%s\b`, word)) 
 		lower = re.ReplaceAllString(lower, "")
 	}
 	
-	// 4. Rapikan Spasi & Huruf Besar
 	cleaned := strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(lower, " "))
 	if len(cleaned) > 1 {
 		return strings.ToUpper(string(cleaned[0])) + cleaned[1:]
