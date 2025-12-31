@@ -99,64 +99,81 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	isNumberOnly := errNum == nil && targetNo > 0
 
 	// ==========================================
-	// F. FITUR UPLOAD FILE KE GOOGLE DRIVE (BARU!) 📁
-	// Logika: Jika ada FileUrl, berarti user kirim file
+	// F. FITUR UPLOAD FILE KE GOOGLE DRIVE (PERBAIKAN) 📁
 	// ==========================================
-	if msg.FileUrl != "" {
-		// Kirim notifikasi loading biar user gak bingung
+	
+	// 1. Normalisasi Data (Cek semua kemungkinan field)
+	finalFileUrl := msg.FileUrl
+	if finalFileUrl == "" {
+		finalFileUrl = msg.Url // Cek field cadangan
+	}
+
+	finalMimeType := msg.MimeType
+	if finalMimeType == "" {
+		finalMimeType = msg.MimeType2
+	}
+
+	// Debugging: Print ke log Vercel untuk cek apa yang sebenarnya diterima
+	fmt.Printf("DEBUG: Msg='%s', FileUrl='%s', Url='%s', Mime='%s'\n", 
+		msg.Message, msg.FileUrl, msg.Url, finalMimeType)
+
+	// LOGIKA UTAMA
+	if finalFileUrl != "" {
+		// Kirim notifikasi loading
 		kirimLoading := model.PushWaSend{
 			Token:   profile.Token,
 			Target:  msg.From,
 			Type:    "text",
 			Delay:   "0",
-			Message: "⏳ Sedang mengupload file ke Drive...",
+			Message: "⏳ Mendeteksi file... Sedang mengupload ke Drive.",
 		}
 		atapi.PostJSON[interface{}](kirimLoading, profile.URLApi)
 
-		// 1. Tentukan Nama File
-		fileName := pesan // Gunakan caption sebagai nama file
+		// Tentukan Nama File
+		fileName := pesan 
 		if fileName == "" {
 			fileName = fmt.Sprintf("WA-Upload-%d", time.Now().Unix())
 		}
 		
-		// Pastikan ekstensi file ada (penting biar bisa dibuka di Drive)
+		// Deteksi Ekstensi
 		if !strings.Contains(fileName, ".") {
 			ext := ".file"
-			if msg.MimeType == "application/pdf" { ext = ".pdf" }
-			if strings.Contains(msg.MimeType, "image") { ext = ".jpg" }
-			if strings.Contains(msg.MimeType, "word") { ext = ".docx" }
-			if strings.Contains(msg.MimeType, "sheet") { ext = ".xlsx" }
+			if strings.Contains(finalMimeType, "pdf") { ext = ".pdf" }
+			if strings.Contains(finalMimeType, "image") { ext = ".jpg" }
+			if strings.Contains(finalMimeType, "png") { ext = ".png" }
+			if strings.Contains(finalMimeType, "word") { ext = ".docx" }
+			if strings.Contains(finalMimeType, "sheet") { ext = ".xlsx" }
 			fileName += ext
 		}
 
-		// 2. Download File dari WhatsApp Server
-		respFile, errDown := http.Get(msg.FileUrl)
+		// Download File
+		respFile, errDown := http.Get(finalFileUrl) // Pakai finalFileUrl
 		if errDown != nil {
-			replyMsg = "❌ Gagal mendownload file dari WhatsApp."
+			replyMsg = "❌ Gagal mendownload file dari WhatsApp server."
+			fmt.Printf("Error Download: %v\n", errDown)
 		} else {
 			defer respFile.Body.Close()
 
-			// 3. Upload ke Google Drive via Helper gdrive
+			// Upload ke Drive
 			fileID, webLink, errUp := gdrive.UploadToDrive(sender, fileName, respFile.Body)
 			
 			if errUp != nil {
-				// Cek terminal Vercel/Lokal untuk detail error
 				fmt.Printf("Error Upload GDrive: %v\n", errUp)
-				replyMsg = "❌ Gagal upload ke Drive. Cek apakah Token Google sudah diset di database?"
+				replyMsg = "❌ Gagal upload ke Drive. Cek log server untuk detail."
 			} else {
-				// 4. Sukses! Simpan metadata ke tabel 'drive_files'
+				// Simpan ke DB
 				newFile := model.DriveFile{
 					ID:           primitive.NewObjectID(),
 					UserPhone:    sender,
 					GoogleFileID: fileID,
 					FileName:     fileName,
-					MimeType:     msg.MimeType,
+					MimeType:     finalMimeType,
 					DriveLink:    webLink,
 					UploadedAt:   time.Now(),
 				}
 				atdb.InsertOneDoc(config.Mongoconn, "drive_files", newFile)
 
-				replyMsg = fmt.Sprintf("✅ *File Tersimpan di Drive!*\n\n📂 Nama: %s\n🔗 Link: %s\n\n_File ini aman di folder KAWAI_FILES_", fileName, webLink)
+				replyMsg = fmt.Sprintf("✅ *Sukses!*\n\n📂 %s\n🔗 %s", fileName, webLink)
 			}
 		}
 

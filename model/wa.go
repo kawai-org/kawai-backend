@@ -4,11 +4,14 @@ package model
 type PushWaIncoming struct {
 	DeviceNumber string `json:"deviceNumber"`
 	Message      string `json:"message"`
-	From         string `json:"from"` // Nomor Pengirim
+	From         string `json:"from"` 
 	
-	//  FITUR UPLOAD DRIVE
-	FileUrl      string `json:"file_url,omitempty"`  // Link download dari WA
-	MimeType     string `json:"mimetype,omitempty"`  // Tipe file (pdf/jpg)
+	// 🔥 UPDATE: Support berbagai variasi nama field dari Gateway
+	FileUrl      string `json:"file_url,omitempty"`  // Versi 1
+	Url          string `json:"url,omitempty"`       // Versi 2 (Sering dipakai)
+	
+	MimeType     string `json:"mimetype,omitempty"`  // Versi 1
+	MimeType2    string `json:"mime_type,omitempty"` // Versi 2
 }
 
 // 2. Struktur Kirim Pesan ke PushWa
