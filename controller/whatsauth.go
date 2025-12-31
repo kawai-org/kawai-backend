@@ -232,8 +232,11 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					display := n.Content
 					if len(display) > 35 { display = display[:35] + "..." }
 					
+					// 🔥 UPDATE IKON (Termasuk Reminder) 🔥
 					icon := "📝"
-					if n.Type == "link" { icon = "🔗" } else if n.Type == "mixed" { icon = "📑" }
+					if n.Type == "link" { icon = "🔗" }
+					if n.Type == "mixed" { icon = "📑" }
+					if n.Type == "reminder" { icon = "⏰" } // Ikon baru!
 
 					sb.WriteString(fmt.Sprintf("\n%d. %s %s", nomor, icon, display))
 				}
@@ -278,7 +281,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		}
 
 	// ==========================================
-	// D. FITUR PENGINGAT (REMINDER)
+	// D. FITUR PENGINGAT (REMINDER + NOTE HYBRID)
 	// Keyword: ingatkan, remind
 	// ==========================================
 	} else if hasPrefixAny(pesanLower, []string{"ingatkan", "remind", "ingat", "ing", "ingt", "rmd", "reminder"}) {
@@ -296,7 +299,7 @@ Coba ketik waktu yang jelas ya, contohnya:
 			// Validasi Waktu
 			replyMsg = "⚠️ Waktu sudah terlewat bos. Coba waktu yang akan datang."
 		} else {
-			// Simpan ke Database
+			// 1. SIMPAN KE REMINDERS (Untuk Alarm Cron Job)
 			newReminder := model.Reminder{
 				ID:            primitive.NewObjectID(),
 				UserPhone:     sender,
@@ -306,9 +309,21 @@ Coba ketik waktu yang jelas ya, contohnya:
 			}
 			atdb.InsertOneDoc(config.Mongoconn, "reminders", newReminder)
 
-			// Feedback
+			// 2. SIMPAN KE NOTES (Agar masuk list catatan juga - HYBRID FEATURE)
+			noteID := primitive.NewObjectID()
+			newNote := model.Note{
+				ID:        noteID,
+				UserPhone: sender,
+				Original:  pesan,
+				Content:   title,      // Isi catatan = Judul yang sudah dibersihkan
+				Type:      "reminder", // Tipe khusus biar ikonnya beda
+				CreatedAt: time.Now(),
+			}
+			atdb.InsertOneDoc(config.Mongoconn, "notes", newNote)
+
+			// Feedback Lengkap
 			timeStr := scheduledTime.Format("Monday, 02 Jan • 15:04 WIB")
-			replyMsg = fmt.Sprintf("⏰ *Siap! Pengingat Diset.*\n\n📌 Topik: %s\n⏳ Waktu: %s\n\n_Saya akan ingatkan di WA ini._", title, timeStr)
+			replyMsg = fmt.Sprintf("⏰ *Pengingat & Catatan Diset!*\n\n📌 Topik: %s\n⏳ Waktu: %s\n\n_Data ini juga sudah masuk ke menu List._", title, timeStr)
 		}
 
 	// ==========================================
