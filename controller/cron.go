@@ -18,14 +18,16 @@ import (
 func HandleCron(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// 1. Ambil Profile Bot (Buat dapet Token WA)
+	// Setup Timezone WIB untuk konversi tampilan
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+
 	profile, errProf := atdb.GetOneDoc[model.BotProfile](config.Mongoconn, "profile", bson.M{})
 	if errProf != nil {
 		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Profile Bot not found"})
 		return
 	}
 
-	// 2. Cari Reminder yang 'Pending' DAN Waktunya Sudah Lewat (<= Sekarang)
+	// Cari Reminder yang 'Pending' DAN Waktunya Sudah Lewat
 	now := time.Now()
 	filter := bson.M{
 		"status":         "pending",
@@ -45,16 +47,18 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Loop dan Kirim Pesan
 	count := 0
 	for _, rem := range reminders {
-		// Format Pesan
-		pesan := fmt.Sprintf("⏰ *Waktunya!*\n\nTopik: %s\n\n_Pengingat ini diset untuk: %s_", 
-			rem.Title, 
-			rem.ScheduledTime.Format("02 Jan 15:04"),
+		// 🔥 PERBAIKAN TIMEZONE 🔥
+		// Konversi waktu dari DB (UTC) ke WIB sebelum ditampilkan
+		waktuWIB := rem.ScheduledTime.In(loc)
+
+		pesan := fmt.Sprintf("⏰ *Waktunya!*\n\n📌 Topik: %s\n⏳ Waktu: %s\n\n_Pengingat ini diset untuk: %s_", 
+			rem.Title,
+			waktuWIB.Format("15:04 WIB"), // Tampilkan Jam saja biar ringkas
+			waktuWIB.Format("02 Jan 2006, 15:04 WIB"), // Tampilkan lengkap di bawah
 		)
 
-		// Kirim WA
 		kirim := model.PushWaSend{
 			Token:   profile.Token,
 			Target:  rem.UserPhone,
@@ -63,10 +67,8 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 			Message: pesan,
 		}
 		
-		// 🔥 PERBAIKAN DISINI: Menangkap 3 return value (tambah satu _ lagi)
 		_, _, errSend := atapi.PostJSON[interface{}](kirim, profile.URLApi)
 		
-		// 4. Update Status jadi 'sent' (Biar gak dikirim ulang terus)
 		if errSend == nil {
 			update := bson.M{"$set": bson.M{"status": "sent"}}
 			config.Mongoconn.Collection("reminders").UpdateOne(context.TODO(), bson.M{"_id": rem.ID}, update)
@@ -74,11 +76,10 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Laporan Selesai
 	resp := map[string]interface{}{
 		"status":    "success",
 		"processed": count,
-		"time":      now.Format(time.RFC3339),
+		"server_time": now.Format(time.RFC3339),
 	}
 	json.NewEncoder(w).Encode(resp)
 }

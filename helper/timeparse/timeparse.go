@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Helper Map untuk Nama Bulan 
+// Helper Map untuk Nama Bulan
 var monthMap = map[string]time.Month{
 	"januari": 1, "jan": 1, "january": 1,
 	"februari": 2, "feb": 2, "pebruari": 2, "february": 2,
@@ -224,18 +224,26 @@ func ParseNaturalTime(text string) (time.Time, string) {
 	return targetTime, cleanTitle
 }
 
+// Helper membersihkan kata-kata sampah dari judul
 func cleanText(text string, removeList []string) string {
 	lower := strings.ToLower(text)
+	
+	// 1. Hapus Format Jam Angka (10:30, 09.00)
 	reTime := regexp.MustCompile(`\d{1,2}[:.]\d{1,2}`)
 	lower = reTime.ReplaceAllString(lower, "")
 	
+	// 2. Hapus Pola "Jam X", "Pkl X" (Termasuk angkanya)
+	// Ini yang memperbaiki bug "Rapat 9" -> Menghapus "jm 9" sekaligus
+	reJamFull := regexp.MustCompile(`\b(jam|jm|pukul|pkl)\s*\d{1,2}\b`)
+	lower = reJamFull.ReplaceAllString(lower, "")
+
+	// 3. Hapus Keyword Sampah
 	for _, word := range removeList {
-		// \b boundary biar gak ngehapus "jam" dari kata "jambret"
 		re := regexp.MustCompile(fmt.Sprintf(`\b%s\b`, word)) 
 		lower = re.ReplaceAllString(lower, "")
 	}
 	
-	// Kembalikan huruf besar di awal (Title Case) sederhana
+	// 4. Rapikan Spasi & Huruf Besar
 	cleaned := strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(lower, " "))
 	if len(cleaned) > 1 {
 		return strings.ToUpper(string(cleaned[0])) + cleaned[1:]
