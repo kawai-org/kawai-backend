@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -58,6 +60,19 @@ func GetHome(respw http.ResponseWriter, req *http.Request) {
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// ==========================================
+	// 🕵️‍♂️ DEBUGGING MODE: LIHAT RAW JSON
+	// ==========================================
+	// Kita baca dulu body-nya sebagai bytes untuk diintip
+	bodyBytes, _ := io.ReadAll(r.Body)
+	
+	// Print ke Log Vercel (PENTING: Cek log ini nanti!)
+	fmt.Printf("🔥 RAW JSON DARI WA: %s\n", string(bodyBytes))
+
+	// Kembalikan body agar bisa dibaca ulang oleh Decoder json
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	// ==========================================
+
 	// 1. Decode Payload JSON dari WhatsApp
 	var msg model.PushWaIncoming
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
@@ -99,69 +114,49 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	isNumberOnly := errNum == nil && targetNo > 0
 
 	// ==========================================
-	// F. FITUR UPLOAD FILE KE GOOGLE DRIVE (PERBAIKAN) 📁
+	// F. FITUR UPLOAD FILE (Versi Debug)
 	// ==========================================
 	
-	// 1. Normalisasi Data (Cek semua kemungkinan field)
+	// Cek Field URL
 	finalFileUrl := msg.FileUrl
-	if finalFileUrl == "" {
-		finalFileUrl = msg.Url // Cek field cadangan
-	}
+	if finalFileUrl == "" { finalFileUrl = msg.Url }
 
+	// Cek Field MimeType
 	finalMimeType := msg.MimeType
-	if finalMimeType == "" {
-		finalMimeType = msg.MimeType2
-	}
+	if finalMimeType == "" { finalMimeType = msg.MimeType2 }
 
-	// Debugging: Print ke log Vercel untuk cek apa yang sebenarnya diterima
-	fmt.Printf("DEBUG: Msg='%s', FileUrl='%s', Url='%s', Mime='%s'\n", 
-		msg.Message, msg.FileUrl, msg.Url, finalMimeType)
+	fmt.Printf("[PARSED DATA] Msg: %s | URL: %s | Mime: %s\n", msg.Message, finalFileUrl, finalMimeType)
 
-	// LOGIKA UTAMA
 	if finalFileUrl != "" {
-		// Kirim notifikasi loading
 		kirimLoading := model.PushWaSend{
-			Token:   profile.Token,
-			Target:  msg.From,
-			Type:    "text",
-			Delay:   "0",
-			Message: "⏳ Mendeteksi file... Sedang mengupload ke Drive.",
+			Token:   profile.Token, Target:  msg.From, Type:    "text", Delay:   "0",
+			Message: "⏳ Sedang mendownload file...",
 		}
 		atapi.PostJSON[interface{}](kirimLoading, profile.URLApi)
 
-		// Tentukan Nama File
 		fileName := pesan 
-		if fileName == "" {
-			fileName = fmt.Sprintf("WA-Upload-%d", time.Now().Unix())
-		}
+		if fileName == "" { fileName = fmt.Sprintf("WA-Upload-%d", time.Now().Unix()) }
 		
-		// Deteksi Ekstensi
 		if !strings.Contains(fileName, ".") {
 			ext := ".file"
 			if strings.Contains(finalMimeType, "pdf") { ext = ".pdf" }
 			if strings.Contains(finalMimeType, "image") { ext = ".jpg" }
 			if strings.Contains(finalMimeType, "png") { ext = ".png" }
-			if strings.Contains(finalMimeType, "word") { ext = ".docx" }
-			if strings.Contains(finalMimeType, "sheet") { ext = ".xlsx" }
 			fileName += ext
 		}
 
-		// Download File
-		respFile, errDown := http.Get(finalFileUrl) // Pakai finalFileUrl
+		respFile, errDown := http.Get(finalFileUrl)
 		if errDown != nil {
-			replyMsg = "❌ Gagal mendownload file dari WhatsApp server."
+			replyMsg = "❌ Gagal mendownload file."
 			fmt.Printf("Error Download: %v\n", errDown)
 		} else {
 			defer respFile.Body.Close()
-
-			// Upload ke Drive
 			fileID, webLink, errUp := gdrive.UploadToDrive(sender, fileName, respFile.Body)
 			
 			if errUp != nil {
 				fmt.Printf("Error Upload GDrive: %v\n", errUp)
-				replyMsg = "❌ Gagal upload ke Drive. Cek log server untuk detail."
+				replyMsg = "❌ Gagal upload ke Drive. Cek log server."
 			} else {
-				// Simpan ke DB
 				newFile := model.DriveFile{
 					ID:           primitive.NewObjectID(),
 					UserPhone:    sender,
@@ -172,8 +167,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					UploadedAt:   time.Now(),
 				}
 				atdb.InsertOneDoc(config.Mongoconn, "drive_files", newFile)
-
-				replyMsg = fmt.Sprintf("✅ *Sukses!*\n\n📂 %s\n🔗 %s", fileName, webLink)
+				replyMsg = fmt.Sprintf("✅ *File Tersimpan!*\n\n📂 %s\n🔗 %s", fileName, webLink)
 			}
 		}
 
