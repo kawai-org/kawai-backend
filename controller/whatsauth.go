@@ -60,20 +60,15 @@ func GetHome(respw http.ResponseWriter, req *http.Request) {
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ==========================================
-	// 🕵️‍♂️ DEBUGGING MODE: LIHAT RAW JSON
-	// ==========================================
-	// Kita baca dulu body-nya sebagai bytes untuk diintip
-	bodyBytes, _ := io.ReadAll(r.Body)
 	
-	// Print ke Log Vercel (PENTING: Cek log ini nanti!)
-	fmt.Printf("🔥 RAW JSON DARI WA: %s\n", string(bodyBytes))
+	//  DEBUGGING MODE: LIHAT RAW JSON
+	
+	bodyBytes, _ := io.ReadAll(r.Body)
 
-	// Kembalikan body agar bisa dibaca ulang oleh Decoder json
+	fmt.Printf("RAW JSON: %s\n", string(bodyBytes)) 
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-	// ==========================================
 
-	// 1. Decode Payload JSON dari WhatsApp
+	// 1. Decode Payload
 	var msg model.PushWaIncoming
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		json.NewEncoder(w).Encode(model.Response{Response: "Bad Request"})
@@ -85,16 +80,16 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Sanitasi Nomor HP & Switch Identitas
+	// 2. Sanitasi Nomor HP
 	sender := msg.From
 	if strings.Contains(sender, "@") {
 		sender = strings.Split(sender, "@")[0]
 	}
-	if sender == "233332956778603" { // ID Laptop -> ID HP
+	if sender == "233332956778603" { 
 		sender = "6285793766959"
 	}
 
-	// 3. Simpan Log Chat (Audit Trail)
+	// 3. Simpan Log Chat
 	atdb.InsertOneDoc(config.Mongoconn, "message_logs", model.MessageLog{
 		ID:         primitive.NewObjectID(),
 		From:       sender,
@@ -104,30 +99,22 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 
 	profile, _ := atdb.GetOneDoc[model.BotProfile](config.Mongoconn, "profile", bson.M{})
 
-	// Persiapan Variabel
 	pesan := strings.TrimSpace(msg.Message)
 	pesanLower := strings.ToLower(pesan)
 	var replyMsg string
 
-	// Cek apakah pesan HANYA ANGKA? (Untuk shortcut baca detail)
 	targetNo, errNum := strconv.Atoi(pesan)
 	isNumberOnly := errNum == nil && targetNo > 0
 
-	// ==========================================
-	// F. FITUR UPLOAD FILE (Versi Debug)
-	// ==========================================
-	
-	// Cek Field URL
+
+	// FITUR F: UPLOAD FILE 
+
 	finalFileUrl := msg.FileUrl
 	if finalFileUrl == "" { finalFileUrl = msg.Url }
-
-	// Cek Field MimeType
-	finalMimeType := msg.MimeType
-	if finalMimeType == "" { finalMimeType = msg.MimeType2 }
-
-	fmt.Printf("[PARSED DATA] Msg: %s | URL: %s | Mime: %s\n", msg.Message, finalFileUrl, finalMimeType)
+	
 
 	if finalFileUrl != "" {
+		// --- LOGIKA UPLOAD ---
 		kirimLoading := model.PushWaSend{
 			Token:   profile.Token, Target:  msg.From, Type:    "text", Delay:   "0",
 			Message: "⏳ Sedang mendownload file...",
@@ -138,32 +125,24 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		if fileName == "" { fileName = fmt.Sprintf("WA-Upload-%d", time.Now().Unix()) }
 		
 		if !strings.Contains(fileName, ".") {
-			ext := ".file"
-			if strings.Contains(finalMimeType, "pdf") { ext = ".pdf" }
-			if strings.Contains(finalMimeType, "image") { ext = ".jpg" }
-			if strings.Contains(finalMimeType, "png") { ext = ".png" }
-			fileName += ext
+			fileName += ".file" 
 		}
 
 		respFile, errDown := http.Get(finalFileUrl)
 		if errDown != nil {
 			replyMsg = "❌ Gagal mendownload file."
-			fmt.Printf("Error Download: %v\n", errDown)
 		} else {
 			defer respFile.Body.Close()
 			fileID, webLink, errUp := gdrive.UploadToDrive(sender, fileName, respFile.Body)
 			
 			if errUp != nil {
 				fmt.Printf("Error Upload GDrive: %v\n", errUp)
-				replyMsg = "❌ Gagal upload ke Drive. Cek log server."
+				replyMsg = "❌ Gagal upload ke Drive."
 			} else {
 				newFile := model.DriveFile{
-					ID:           primitive.NewObjectID(),
-					UserPhone:    sender,
-					GoogleFileID: fileID,
-					FileName:     fileName,
-					MimeType:     finalMimeType,
-					DriveLink:    webLink,
+					ID:           primitive.NewObjectID(), UserPhone:    sender,
+					GoogleFileID: fileID, FileName:     fileName,
+					MimeType:     "unknown", DriveLink:    webLink,
 					UploadedAt:   time.Now(),
 				}
 				atdb.InsertOneDoc(config.Mongoconn, "drive_files", newFile)
@@ -171,9 +150,71 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-	// ==========================================
-	// A. FITUR SIMPAN / CATAT
-	// ==========================================
+	
+	// FITUR : BACKUP / EXPORT
+
+	} else if hasPrefixAny(pesanLower, []string{"backup", "export", "unduh"}) {
+		
+		// 1. Ambil Semua Catatan User
+		filter := bson.M{"user_phone": sender}
+		opts := options.Find().SetSort(bson.M{"created_at": -1})
+		
+		cursor, err := config.Mongoconn.Collection("notes").Find(context.TODO(), filter, opts)
+		if err != nil {
+			replyMsg = "❌ Gagal mengambil data database."
+		} else {
+			var notes []model.Note
+			if cursor != nil { cursor.All(context.TODO(), &notes) }
+
+			if len(notes) > 0 {
+				// 2. Susun Isi File Text
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("DATA BACKUP KAWAI - %s\n", sender))
+				sb.WriteString(fmt.Sprintf("Generated: %s\n", time.Now().Format("02 Jan 2006 15:04")))
+				sb.WriteString("=========================================\n\n")
+
+				for i, n := range notes {
+					sb.WriteString(fmt.Sprintf("[%d] %s (%s)\n", i+1, n.CreatedAt.Format("02/01/2006"), n.Type))
+					sb.WriteString(fmt.Sprintf("Isi: %s\n", n.Content))
+					sb.WriteString("-----------------------------------------\n")
+				}
+
+				// 3. Upload ke Drive
+				fileContent := sb.String()
+				fileReader := strings.NewReader(fileContent)
+				fileName := fmt.Sprintf("Backup_Kawai_%s.txt", time.Now().Format("20060102_1504"))
+
+				kirimLoading := model.PushWaSend{
+					Token:   profile.Token, Target:  msg.From, Type:    "text", Delay:   "0",
+					Message: "⏳ Membuat backup & upload ke Drive...",
+				}
+				atapi.PostJSON[interface{}](kirimLoading, profile.URLApi)
+
+				fileID, webLink, errUp := gdrive.UploadToDrive(sender, fileName, fileReader)
+
+				if errUp != nil {
+					fmt.Printf("Error Backup: %v\n", errUp)
+					replyMsg = "❌ Gagal backup ke Drive. Cek token Google."
+				} else {
+					// Simpan Log
+					newFile := model.DriveFile{
+						ID:           primitive.NewObjectID(), UserPhone:    sender,
+						GoogleFileID: fileID, FileName:     fileName,
+						MimeType:     "text/plain", DriveLink:    webLink,
+						UploadedAt:   time.Now(),
+					}
+					atdb.InsertOneDoc(config.Mongoconn, "drive_files", newFile)
+
+					replyMsg = fmt.Sprintf("✅ *Backup Berhasil!*\n\n📂 Nama: %s\n🔗 Link: %s", fileName, webLink)
+				}
+
+			} else {
+				replyMsg = "Belum ada catatan untuk dibackup."
+			}
+		}
+
+	// FITUR A: SIMPAN / CATAT
+	
 	} else if hasPrefixAny(pesanLower, []string{"simpan", "catat", "save"}) {
 		parts := strings.Fields(pesan)
 		if len(parts) > 1 {
@@ -191,16 +232,13 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 				ID: noteID, UserPhone: sender, Original: pesan, Content: content, Type: noteType, CreatedAt: time.Now(),
 			})
 
-			// Insert Link terpisah
 			if foundURL != "" {
 				linkTitle := content
 				if linkTitle == "" || linkTitle == foundURL { linkTitle = foundURL }
-				if len(linkTitle) > 50 { linkTitle = linkTitle[:50] + "..." }
 				atdb.InsertOneDoc(config.Mongoconn, "links", model.Link{
 					ID: primitive.NewObjectID(), NoteID: noteID, UserPhone: sender, URL: foundURL, Title: linkTitle, CreatedAt: time.Now(),
 				})
 			}
-			// Insert Tags
 			for _, t := range foundTags {
 				atdb.InsertOneDoc(config.Mongoconn, "tags", model.Tag{
 					ID: primitive.NewObjectID(), NoteID: noteID, TagName: t, UserPhone: sender,
@@ -208,97 +246,65 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			}
 			replyMsg = "✅ Tersimpan! Ketik *List* untuk melihat."
 		} else {
-			replyMsg = "Format salah bos.\nKetik: *Catat [isi catatan]*"
+			replyMsg = "Format salah. Ketik: *Catat [isi]*"
 		}
 
-	// ==========================================
-	// B. FITUR LIST (Dengan Ikon Baru)
-	// ==========================================
+	
+	// FITUR B: LIST
+	
 	} else if hasPrefixAny(pesanLower, []string{"list", "menu", "tampilkan"}) {
 		filter := bson.M{"user_phone": sender}
-		page := 1
-		limit := 10
-		
-		parts := strings.Fields(pesan)
-		if len(parts) > 1 {
-			if p, err := strconv.Atoi(parts[len(parts)-1]); err == nil && p > 0 { page = p }
-		}
-		opts := options.Find().SetLimit(int64(limit)).SetSkip(int64((page - 1) * limit)).SetSort(bson.M{"created_at": -1})
+		opts := options.Find().SetLimit(10).SetSort(bson.M{"created_at": -1})
 
-		// Cek mode List Link
 		if strings.Contains(pesanLower, "link") {
 			cursor, _ := config.Mongoconn.Collection("links").Find(context.TODO(), filter, opts)
 			var links []model.Link
 			if cursor != nil { cursor.All(context.TODO(), &links) }
 			if len(links) > 0 {
 				var sb strings.Builder
-				sb.WriteString(fmt.Sprintf("🔗 *Koleksi Link (Hal %d)*\n", page))
+				sb.WriteString("🔗 *Koleksi Link*\n")
 				for i, l := range links {
-					nomor := (page-1)*limit + i + 1
-					judul := l.Title
-					if judul == "" { judul = l.URL }
-					sb.WriteString(fmt.Sprintf("\n%d. *%s*\n   %s", nomor, judul, l.URL))
+					sb.WriteString(fmt.Sprintf("\n%d. %s\n   %s", i+1, l.Title, l.URL))
 				}
-				sb.WriteString(fmt.Sprintf("\n\n_Ketik *List Link %d* untuk halaman berikutnya._", page+1))
 				replyMsg = sb.String()
 			} else {
-				replyMsg = "Belum ada link tersimpan."
+				replyMsg = "Belum ada link."
 			}
 		} else {
-			// List Catatan Biasa
 			cursor, _ := config.Mongoconn.Collection("notes").Find(context.TODO(), filter, opts)
 			var notes []model.Note
 			if cursor != nil { cursor.All(context.TODO(), &notes) }
-
 			if len(notes) > 0 {
 				var sb strings.Builder
-				sb.WriteString(fmt.Sprintf("📂 *Catatan (Hal %d)*\n", page))
+				sb.WriteString("📂 *Catatan Terkini*\n")
 				for i, n := range notes {
-					nomor := (page-1)*limit + i + 1
 					display := n.Content
 					if len(display) > 35 { display = display[:35] + "..." }
-					
-					// Ikon Cerdas
-					icon := "📝"
-					if n.Type == "link" { icon = "🔗" }
-					if n.Type == "mixed" { icon = "📑" }
-					if n.Type == "reminder" { icon = "⏰" }
-
-					sb.WriteString(fmt.Sprintf("\n%d. %s %s", nomor, icon, display))
+					sb.WriteString(fmt.Sprintf("\n%d. %s", i+1, display))
 				}
-				sb.WriteString(fmt.Sprintf("\n\n👉 *Ketik nomornya* untuk detail.  (Contoh: ketik *1*)\n👉 Ketik *List %d* untuk halaman berikutnya.", page+1))
+				sb.WriteString("\n\n💡 Ketik *Backup* untuk simpan semua ke Drive!")
 				replyMsg = sb.String()
 			} else {
-				replyMsg = "Belum ada catatan. Yuk ketik *Catat [isi]*"
+				replyMsg = "Belum ada catatan."
 			}
 		}
 
-	// ==========================================
-	// C. FITUR BACA DETAIL
-	// ==========================================
+	// FITUR C: BACA DETAIL 
+
 	} else if isNumberOnly {
 		skip := int64(targetNo - 1)
 		opts := options.FindOne().SetSkip(skip).SetSort(bson.M{"created_at": -1})
 		var note model.Note
 		errDB := config.Mongoconn.Collection("notes").FindOne(context.TODO(), bson.M{"user_phone": sender}, opts).Decode(&note)
-		
 		if errDB == nil {
-			dateStr := note.CreatedAt.Format("02 Jan 15:04")
-			var sb strings.Builder
-			sb.WriteString(fmt.Sprintf("📂 *DETAIL NO. %d*\n📅 %s\n----------------------\n%s\n----------------------", targetNo, dateStr, note.Content))
-			// Tampilkan link jika ada
-			if note.Type == "link" || note.Type == "mixed" {
-				url := extractURL(note.Content)
-				if url != "" { sb.WriteString(fmt.Sprintf("\n🔗 *Link:* %s", url)) }
-			}
-			replyMsg = sb.String()
+			replyMsg = fmt.Sprintf("📂 *DETAIL NO. %d*\n\n%s", targetNo, note.Content)
 		} else {
-			replyMsg = fmt.Sprintf("❌ Data nomor %d tidak ditemukan.", targetNo)
+			replyMsg = "❌ Data tidak ditemukan."
 		}
 
-	// ==========================================
-	// D. FITUR PENGINGAT (Hybrid + Timeparse Baru)
-	// ==========================================
+	
+	// FITUR D: REMINDER
+	
 	} else if hasPrefixAny(pesanLower, []string{"ingatkan", "remind", "ingat", "ing", "ingt"}) {
 		scheduledTime, title := timeparse.ParseNaturalTime(pesan)
 		
@@ -325,15 +331,15 @@ Coba ketik waktu yang jelas ya, contohnya:
 			replyMsg = fmt.Sprintf("⏰ *Pengingat Diset!*\n\n📌 Topik: %s\n⏳ Waktu: %s", title, timeStr)
 		}
 
-	// ==========================================
-	// E. FITUR BANTUAN
-	// ==========================================
+	
+	// FITUR E: BANTUAN
+
 	} else if hasPrefixAny(pesanLower, []string{"help", "bantuan", "halo", "menu", "p", "hi", "hai", "info"}) {
 		replyMsg = `🤖 *Kawai Assistant Menu*
 
-1️⃣ *UPLOAD KE DRIVE* 📂
-   _Kirim File (PDF/Foto) + Caption_
-   👉 Otomatis masuk folder KAWAI_FILES!
+1️⃣ *BACKUP KE DRIVE* (Andalan! 🌟)
+   Ketik: _Backup_ atau _Export_
+   👉 Upload rekap catatan ke Google Drive.
 
 2️⃣ *SIMPAN CATATAN* 📝
    Keyword: _Catat, Simpan_
@@ -358,16 +364,11 @@ Coba ketik waktu yang jelas ya, contohnya:
 
 Selamat mencoba! 😊`
 	}
-	
 
 	// Kirim Balasan Final
 	if replyMsg != "" && profile.Token != "" {
 		kirim := model.PushWaSend{
-			Token:   profile.Token,
-			Target:  msg.From,
-			Type:    "text",
-			Delay:   "1",
-			Message: replyMsg,
+			Token:   profile.Token, Target:  msg.From, Type:    "text", Delay:   "1", Message: replyMsg,
 		}
 		atapi.PostJSON[interface{}](kirim, profile.URLApi)
 	}
