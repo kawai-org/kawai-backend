@@ -38,8 +38,11 @@ func GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	state := userPhone 
 
 	// Buat URL Login Google
-	url := googleOauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
-	
+	url := googleOauthConfig.AuthCodeURL(state, 
+    oauth2.AccessTypeOffline, 
+    oauth2.SetAuthURLParam("prompt", "consent"), 
+    oauth2.SetAuthURLParam("access_type", "offline"), 
+)
 	// Lempar user ke halaman Google
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
