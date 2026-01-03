@@ -1,91 +1,69 @@
 package atdb
 
 import (
-	"context"
-	"os"
 	"testing"
-	"time"
 
-	"github.com/joho/godotenv" // Import ini
-	"github.com/kawai-org/kawai-backend/config"
-	"github.com/kawai-org/kawai-backend/model"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/bson/primitive" // Wajib import ini
+	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 )
 
-// Helper untuk load env dan koneksi agar tidak berulang
-func setupTestDB(t *testing.T) {
-	if config.Mongoconn == nil {
-		// Asumsi file ini di helper/atdb (2 level dari root)
-		_ = godotenv.Load("../../.env") 
+// Kita test fungsi wrapper database kamu menggunakan Mock
+func TestGetOneDoc(t *testing.T) {
+	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+
+	mt.Run("Success GetOneDoc", func(mt *mtest.T) {
+		collectionName := "test_col"
 		
-		mongoString := os.Getenv("MONGOSTRING")
-		if mongoString == "" {
-			t.Fatal("MONGOSTRING tidak ditemukan di .env")
-		}
+		// Mock Data yang akan dikembalikan oleh DB
+		mt.AddMockResponses(mtest.CreateCursorResponse(1, "db."+collectionName, mtest.FirstBatch, bson.D{
+			{Key: "name", Value: "Kawai"},
+			{Key: "status", Value: "Active"},
+		}))
 
-		mconn := DBInfo{
-			DBString: mongoString, // AMAN
-			DBName:   "kawai_db",
-		}
-		var err error
-		config.Mongoconn, err = MongoConnect(mconn)
+		// Panggil fungsi asli GetOneDoc
+		res, err := GetOneDoc[struct{ Name string `bson:"name"` }](mt.Client.Database("db"), collectionName, bson.M{"name": "Kawai"})
+
 		if err != nil {
-			t.Fatalf("Gagal koneksi database: %v", err)
+			t.Errorf("Gagal ambil doc: %v", err)
 		}
-	}
+		
+		if res.Name != "Kawai" {
+			t.Errorf("Expected Kawai, got %s", res.Name)
+		}
+	})
+
+	mt.Run("Not Found GetOneDoc", func(mt *mtest.T) {
+		// Mock Data Kosong (0 document)
+		mt.AddMockResponses(mtest.CreateCursorResponse(0, "db.test_col", mtest.FirstBatch, bson.D{}))
+
+		_, err := GetOneDoc[struct{ Name string }](mt.Client.Database("db"), "test_col", bson.M{"name": "Ghost"})
+
+		// Harusnya error karena tidak ditemukan
+		if err == nil {
+			t.Errorf("Harusnya error not found, tapi malah sukses")
+		}
+	})
 }
 
-func TestInsertNote(t *testing.T) {
-	// 1. SETUP KONEKSI
-	setupTestDB(t)
+func TestInsertOneDoc(t *testing.T) {
+	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
-	// 2. DATA DUMMY (Sesuai Struct Baru)
-	data := model.Note{
-		ID:        primitive.NewObjectID(),
-		UserPhone: "628123456789",
-		Original:  "Catat Test Code Coverage",
-		Content:   "Test Code Coverage",
-		Type:      "text",
-		CreatedAt: time.Now(),
-	}
+	mt.Run("Success Insert", func(mt *mtest.T) {
+		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-	// 3. EKSEKUSI
-	res, err := InsertNote(data)
-
-	// 4. VALIDASI
-	if err != nil {
-		t.Errorf("Gagal menyimpan catatan: %v", err)
-	}
-
-	if res == nil {
-		t.Error("Hasil insert kosong (nil)")
-	}
-}
-
-func TestGetAndDeleteNote(t *testing.T) {
-	// Pastikan koneksi ready
-	setupTestDB(t)
-
-	// Gunakan filter berdasarkan Content
-	filter := bson.M{"content": "Test Code Coverage"}
-
-	// 1. Test Get
-	note, err := GetOneDoc[model.Note](config.Mongoconn, "notes", filter)
-	if err != nil {
-		t.Errorf("Gagal ambil catatan: %v", err)
-	}
-
-	// VALIDASI
-	if note.Content != "Test Code Coverage" {
-		t.Errorf("Data salah: ingin 'Test Code Coverage', dapat '%s'", note.Content)
-	}
-
-	// 2. Test DeleteMany
-	collection := config.Mongoconn.Collection("notes")
-	_, err = collection.DeleteMany(context.TODO(), filter)
-
-	if err != nil {
-		t.Errorf("Gagal membersihkan database: %v", err)
-	}
+		// InsertOneDoc mengembalikan (id, err)
+		id, err := InsertOneDoc(mt.Client.Database("db"), "test_col", bson.M{"name": "New Data"})
+		
+		if err != nil {
+			t.Errorf("Gagal insert: %v", err)
+		}
+		
+		// PERBAIKAN UTAMA DISINI:
+		// Jangan pakai 'id == nil', tapi 'id == primitive.NilObjectID'
+		// Karena id tipe-nya primitive.ObjectID (Array), bukan Pointer.
+		if id == primitive.NilObjectID {
+			t.Errorf("ID hasil insert kosong (NilObjectID)")
+		}
+	})
 }
