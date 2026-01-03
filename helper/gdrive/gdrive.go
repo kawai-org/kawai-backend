@@ -37,7 +37,7 @@ func GetService(userPhone string) (*drive.Service, error) {
 		ClientID:     tokenData.ClientID,
 		ClientSecret: tokenData.ClientSecret,
 		Endpoint:     google.Endpoint,
-		RedirectURL:  "https://developers.google.com/oauthplayground", // Ini redirect URI yang kita daftarkan
+		RedirectURL:  "https://kawai-be.vercel.app/api/auth/google/callback",
 		Scopes:       []string{drive.DriveScope},
 	}
 
