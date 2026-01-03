@@ -204,15 +204,23 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					fileID, webLink, errUp := gdrive.UploadToDrive(sender, fileName, fileReader)
 
 					if errUp != nil {
+						// 1. Log error asli ke console supaya bisa dicek di Vercel
 						fmt.Printf("Error Backup: %v\n", errUp)
-						replyMsg = "❌ Gagal backup ke Drive. Token mungkin expired, coba login ulang."
+
+						// 2. Cek apakah errornya karena kuota penuh
+						errString := fmt.Sprintf("%v", errUp)
+						if strings.Contains(errString, "storageQuotaExceeded") {
+							replyMsg = "❌ Gagal Backup: Penyimpanan Google Drive penuh! Mohon hapus beberapa file dulu."
+						} else {
+							replyMsg = "❌ Gagal backup ke Drive. Token mungkin expired, coba login ulang."
+						}
 					} else {
-						// Simpan Log
+						// Simpan Log jika sukses
 						newFile := model.DriveFile{
 							ID:           primitive.NewObjectID(), UserPhone: sender,
 							GoogleFileID: fileID, FileName: fileName,
-							MimeType: "text/plain", DriveLink: webLink,
-							UploadedAt: time.Now(),
+							MimeType:     "text/plain", DriveLink: webLink,
+							UploadedAt:   time.Now(),
 						}
 						atdb.InsertOneDoc(config.Mongoconn, "drive_files", newFile)
 
