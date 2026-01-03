@@ -485,5 +485,7 @@ Selamat mencoba! 😊`
 }
 
 func NotFound(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json") // Tambahan bagus
+	w.WriteHeader(http.StatusNotFound)                
 	json.NewEncoder(w).Encode(model.Response{Response: "404 Not Found"})
 }
