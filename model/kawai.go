@@ -2,22 +2,20 @@ package model
 
 import (
 	"time"
-
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-
-// 1. users: Data induk pengguna
+// 1. users: Data induk (Admin & User User WA gabung disini, beda di 'Role')
 type User struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	PhoneNumber string             `bson:"phone_number" json:"phone_number"`
 	Name        string             `bson:"name" json:"name"`
-	Role        string             `bson:"role,omitempty" json:"role,omitempty"`         // Field Baru
-	Password    string             `bson:"password,omitempty" json:"password,omitempty"` // Field Baru
+	Role        string             `bson:"role,omitempty" json:"role,omitempty"`     // "user" atau "admin"
+	Password    string             `bson:"password,omitempty" json:"password,omitempty"` // Cuma diisi kalau admin
 	CreatedAt   time.Time          `bson:"created_at,omitempty" json:"created_at,omitempty"`
 }
 
-// 2. bot_profiles: Konfigurasi Bot 
+// 2. bot_profiles: Konfigurasi Bot
 type BotProfile struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Token       string             `bson:"token" json:"token"`
@@ -26,7 +24,7 @@ type BotProfile struct {
 	BotName     string             `bson:"botname" json:"botname"`
 }
 
-// 3. message_logs: Audit Trail / Riwayat Chat
+// 3. message_logs: Riwayat Chat
 type MessageLog struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	From       string             `bson:"from" json:"from"`
@@ -34,19 +32,17 @@ type MessageLog struct {
 	ReceivedAt time.Time          `bson:"received_at" json:"received_at"`
 }
 
-
-
-// 4. notes: Tabel utama catatan & hybrid reminder
+// 4. notes: Catatan
 type Note struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	UserPhone string             `bson:"user_phone" json:"user_phone"`
 	Original  string             `bson:"original" json:"original"`
 	Content   string             `bson:"content" json:"content"`
-	Type      string             `bson:"type" json:"type"` // "text", "link", "mixed", "reminder"
+	Type      string             `bson:"type" json:"type"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
 
-// 5. links: URL yang diekstrak dari catatan
+// 5. links: URL Extracted
 type Link struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	NoteID    primitive.ObjectID `bson:"note_id" json:"note_id"`
@@ -56,7 +52,7 @@ type Link struct {
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
 
-// 6. tags: Hashtag (#)
+// 6. tags: Hashtag (#) - Pertahankan untuk fitur Search
 type Tag struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	NoteID    primitive.ObjectID `bson:"note_id" json:"note_id"`
@@ -64,25 +60,26 @@ type Tag struct {
 	UserPhone string             `bson:"user_phone" json:"user_phone"`
 }
 
-// 7. categories: Pengelompokan (Syarat Relasi Tambahan)
-type Category struct {
-	ID   primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Name string             `bson:"name" json:"name"` // "Kuliah", "Pribadi"
+// 7. activity_logs: PENGGANTI CATEGORIES (Syarat Audit Trail)
+type ActivityLog struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	UserPhone string             `bson:"user_phone" json:"user_phone"` // Siapa pelakunya
+	Action    string             `bson:"action" json:"action"`         // "LOGIN_ADMIN", "DELETE_NOTE", "GENERATE_MAGIC_LINK"
+	IPAddress string             `bson:"ip_address,omitempty" json:"ip_address,omitempty"`
+	Details   string             `bson:"details" json:"details"`
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
 
-// KELOMPOK 3: REMINDER & GOOGLE DRIVE 
-
-
-// 8. reminders: Jadwal Pengingat (Cron Job)
+// 8. reminders: Pengingat
 type Reminder struct {
 	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	UserPhone     string             `bson:"user_phone" json:"user_phone"`
 	Title         string             `bson:"title" json:"title"`
 	ScheduledTime time.Time          `bson:"scheduled_time" json:"scheduled_time"`
-	Status        string             `bson:"status" json:"status"` // "pending", "sent"
+	Status        string             `bson:"status" json:"status"`
 }
 
-// 9. google_tokens: Kunci Akses ke Google Drive User
+// 9. google_tokens: Auth Google
 type GoogleToken struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty"`
 	UserPhone    string             `bson:"user_phone"`
@@ -92,20 +89,13 @@ type GoogleToken struct {
 	CreatedAt    time.Time          `bson:"created_at"`
 }
 
-// 10. drive_files: Log File yang sukses diupload ke Drive
+// 10. drive_files: History Upload
 type DriveFile struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty"`
 	UserPhone    string             `bson:"user_phone"`
 	GoogleFileID string             `bson:"google_file_id"`
 	FileName     string             `bson:"file_name"`
-	MimeType     string             `bson:"mime_type"` // pdf, image/jpeg
+	MimeType     string             `bson:"mime_type"`
 	DriveLink    string             `bson:"drive_link"`
 	UploadedAt   time.Time          `bson:"uploaded_at"`
-}
-
-// Struct untuk Data Dashboard (Gabungan/Join)
-type DashboardStats struct {
-    TotalUsers    int64 `json:"total_users"`
-    TotalNotes    int64 `json:"total_notes"`
-    TotalMessages int64 `json:"total_messages"`
 }

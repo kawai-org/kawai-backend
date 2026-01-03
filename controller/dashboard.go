@@ -71,6 +71,56 @@ func GetMyNotes(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func GetNoteDetailWithTags(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+    // Ambil ID note dari URL
+    noteID, err := getIDFromURL(r, "/api/notes/detail/")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "ID URL Salah"})
+		return
+	}
+
+	// Pipeline Aggregation (Join notes + tags)
+	// KITA GANTI bson.D JADI bson.M AGAR TIDAK KUNING
+	pipeline := bson.A{
+		// 1. Filter Note berdasarkan ID
+		bson.M{"$match": bson.M{"_id": noteID}},
+
+		// 2. JOIN ke tabel tags
+		bson.M{"$lookup": bson.M{
+			"from":         "tags",      
+			"localField":   "_id",       // Field di collection 'notes'
+			"foreignField": "note_id",   // Field di collection 'tags'
+			"as":           "related_tags", // Nama field baru untuk hasil join
+		}},
+	}
+
+	cursor, err := config.Mongoconn.Collection("notes").Aggregate(context.TODO(), pipeline)
+    if err != nil {
+         json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Gagal mengambil data"})
+		 return
+    }
+    
+    // Decode hasilnya
+    var results []bson.M
+    if cursor != nil {
+        cursor.All(context.TODO(), &results)
+    }
+    
+	// Cek apakah data ditemukan
+	if len(results) == 0 {
+		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Catatan tidak ditemukan"})
+		return
+	}
+
+    // Kembalikan item pertama (karena search by ID pasti cuma 1)
+    json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "success",
+		"data":   results[0],
+	})
+}
+
 func UpdateNote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)

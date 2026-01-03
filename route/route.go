@@ -75,6 +75,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Notes (List, Edit, Delete)
 	case method == "GET" && path == "/api/dashboard/notes":
 		MiddlewareAuth(controller.GetMyNotes)(w, r)
+	case method == "GET" && path == "/api/dashboard/notes/:id/detail":
+		MiddlewareAuth(controller.GetNoteDetailWithTags)(w, r)
 	case method == "PUT" && strings.HasPrefix(path, "/api/notes/"):
 		MiddlewareAuth(controller.UpdateNote)(w, r)
 	case method == "DELETE" && strings.HasPrefix(path, "/api/notes/"):

@@ -188,28 +188,43 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		}
 
 		} else if hasPrefixAny(pesanLower, []string{"dashboard", "admin", "panel", "login"}) {
-		
-		// Buat Token JWT berlaku 15 menit
-		expirationTime := time.Now().Add(15 * time.Minute)
-		claims := &jwt.MapClaims{
-			"user_phone": sender,
-			"role":       "user",
-			"exp":        expirationTime.Unix(),
-		}
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		
-		// Pastikan ada JWT_SECRET di .env atau hardcode sementara kalau kepepet
-		jwtSecret := os.Getenv("JWT_SECRET")
-		if jwtSecret == "" {
-			jwtSecret = "RAHASIA_NEGARA_KAWAI_2024" // Default key jangan sampai lupa ganti
-		}
-		tokenString, _ := token.SignedString([]byte(jwtSecret))
+    
+    // 1. Buat Token JWT (Berlaku 15 menit)
+    expirationTime := time.Now().Add(15 * time.Minute)
+    claims := &jwt.MapClaims{
+        "user_phone": sender,
+        "role":       "user",
+        "exp":        expirationTime.Unix(),
+    }
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    
+    // 2. Ambil Secret Key
+    jwtSecret := os.Getenv("JWT_SECRET")
+    if jwtSecret == "" {
+        fmt.Println("CRITICAL ERROR: JWT_SECRET belum diset di .env!") 
+        jwtSecret = "temporary_secret_jangan_dipakai_prod"
+    }
+    tokenString, _ := token.SignedString([]byte(jwtSecret))
 
-		// Buat Link
-		// Ganti domain ini dengan domain frontend kamu nanti
-		magicLink := fmt.Sprintf("https://kawai-frontend.vercel.app/auth/magic?token=%s", tokenString)
+    // 3. Buat Magic Link
+    // Pastikan domain ini sesuai dengan frontend kamu nanti
+    magicLink := fmt.Sprintf("https://kawai-frontend.vercel.app/auth/magic?token=%s", tokenString)
+    
+    // 4. Siapkan Pesan Balasan
+    replyMsg = fmt.Sprintf("🎛 *DASHBOARD USER*\n\nKlik link di bawah ini untuk mengelola catatan & pengingat (Edit/Hapus/Rapikan):\n\n👉 %s\n\n_Link ini kedaluwarsa dalam 15 menit._", magicLink)
 
-		replyMsg = fmt.Sprintf("🎛 *DASHBOARD USER*\n\nKlik link di bawah ini untuk mengelola catatan & pengingat (Edit/Hapus/Rapikan):\n\n👉 %s\n\n_Link ini kedaluwarsa dalam 15 menit._", magicLink)
+    // 5. [IMPLEMENTASI STORED PROCEDURE / AUDIT LOG]
+    // Catat aktivitas ini ke database secara background (Async)
+    go func() {
+        logData := model.ActivityLog{
+            ID:        primitive.NewObjectID(),
+            UserPhone: sender,
+            Action:    "REQUEST_DASHBOARD",
+            Details:   "User meminta magic link dashboard",
+            CreatedAt: time.Now(),
+        }
+        atdb.InsertOneDoc(config.Mongoconn, "activity_logs", logData)
+    }()
 
 	// FITUR : BACKUP / EXPORT 
 	} else if hasPrefixAny(pesanLower, []string{"backup", "export", "unduh"}) {
@@ -426,8 +441,11 @@ Coba ketik waktu yang jelas ya, contohnya:
 
 1️⃣ *SIMPAN CATATAN* 📝
    Keyword: _Catat, Simpan_
-   👉 _Catat ide skripsi bab 1_
+   _Catat [Hashtag] [Isi]_
+   👉 _Catat #kuliah ide skripsi _
+   👉 _Catat beli telor #belanja_
    👉 _Simpan Link Zoom https://zoom.us_
+   _(Nanti di Dashboard bisa dicari per label!)_
 
 2️⃣ *LIHAT DATA* 📂
    Keyword: _List, Menu_
@@ -447,7 +465,7 @@ Coba ketik waktu yang jelas ya, contohnya:
 5️⃣ *DASHBOARD* 
    Ketik: _Dashboard_
    👉 Edit catatan & atur alarm lewat web.
-   
+
 6️⃣ *BACKUP DATA* 💾
    Keyword: _Backup, Export_
    👉 _Backup_ (Simpan semua catatan ke Google Drive)

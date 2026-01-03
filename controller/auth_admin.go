@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Struct khusus untuk input login
+
 type LoginInput struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -30,15 +30,15 @@ func LoginAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Cari Admin di Database
-	var admin model.User // Kita pakai struct User tapi filter role='admin'
+	var admin model.User
 	filter := bson.M{"phone_number": input.Username, "role": "admin"} // Username pakai NoHP/Email
 	
     // Gunakan helper get doc kamu
-    admin, err := atdb.GetOneDoc[model.User](config.Mongoconn, "admins", filter)
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Admin tidak ditemukan"})
-		return
-	}
+    admin, err := atdb.GetOneDoc[model.User](config.Mongoconn, "users", filter)
+    if err != nil {
+        json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Admin tidak ditemukan / Bukan Admin"})
+        return
+    }
 
 	// 2. Cek Password (Hash vs Plain)
     // Di database field password harusnya: "$2a$10$X7..." (Hasil Hash)
@@ -62,6 +62,6 @@ func LoginAdmin(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status": "success",
 		"token":  tokenString,
-        "role":   "super_admin", // Bisa diambil dari db
+        "role":   "admin", 
 	})
 }
