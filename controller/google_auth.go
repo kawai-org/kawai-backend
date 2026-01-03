@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/kawai-org/kawai-backend/config"
 	"github.com/kawai-org/kawai-backend/helper/atdb"
@@ -73,7 +74,8 @@ func GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		UserPhone:    userPhone,
 		ClientID:     googleOauthConfig.ClientID,
 		ClientSecret: googleOauthConfig.ClientSecret,
-		RefreshToken: token.RefreshToken, // Ini yang paling penting
+		RefreshToken: token.RefreshToken, 
+		CreatedAt:    time.Now(),
 	}
 
 	// Upsert (Update kalau ada, Insert kalau belum ada)

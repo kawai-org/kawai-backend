@@ -1,17 +1,18 @@
 package controller
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/kawai-org/kawai-backend/config"
 	"github.com/kawai-org/kawai-backend/helper/atapi"
 	"github.com/kawai-org/kawai-backend/helper/atdb"
@@ -56,14 +57,47 @@ func GetHome(respw http.ResponseWriter, req *http.Request) {
 	WriteJSON(respw, http.StatusOK, resp)
 }
 
+// Helper: Fix Invalid UTF-8 (Penyebab error di database)
+func fixUTF8(s string) string {
+	if !utf8.ValidString(s) {
+		v := make([]rune, 0, len(s))
+		for i, r := range s {
+			if r == utf8.RuneError {
+				_, size := utf8.DecodeRuneInString(s[i:])
+				if size == 1 {
+					continue
+				}
+			}
+			v = append(v, r)
+		}
+		return string(v)
+	}
+	return s
+}
+
+// Helper: Upsert User (Otomatis simpan data user baru)
+func EnsureUserExists(phone, name string) {
+    // Filter berdasarkan nomor HP
+	filter := bson.M{"phone_number": phone}
+    
+    // Data yang mau disimpan/diupdate
+	update := bson.M{
+		"$set": bson.M{
+			"phone_number": phone,
+			"name":         name,
+			"role":         "user", // Default role
+            // "$setOnInsert": bson.M{"created_at": time.Now()}, // jika mau created_at tidak berubah
+		},
+	}
+    // Opsi: Upsert = True (Kalau gak ada, buat baru. Kalau ada, update)
+	opts := options.Update().SetUpsert(true)
+    
+	config.Mongoconn.Collection("users").UpdateOne(context.TODO(), filter, update, opts)
+}
+
 // --- LOGIKA UTAMA BOT ---
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	// DEBUGGING MODE: LIHAT RAW JSON
-	bodyBytes, _ := io.ReadAll(r.Body)
-	// fmt.Printf("RAW JSON: %s\n", string(bodyBytes)) // Uncomment jika ingin liat log
-	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	// 1. Decode Payload
 	var msg model.PushWaIncoming
@@ -77,14 +111,19 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Sanitasi Nomor HP
+	// 2. Sanitasi & Simpan User
+	msg.Message = fixUTF8(msg.Message)
 	sender := msg.From
 	if strings.Contains(sender, "@") {
 		sender = strings.Split(sender, "@")[0]
 	}
-	if sender == "233332956778603" {
-		sender = "6285793766959"
+	
+	// Antisipasi jika PushName kosong dari WA
+	userName := msg.PushName
+	if userName == "" {
+		userName = "Kawai User"
 	}
+	go EnsureUserExists(sender, userName) // Simpan user baru ke DB
 
 	// 3. Simpan Log Chat
 	atdb.InsertOneDoc(config.Mongoconn, "message_logs", model.MessageLog{
@@ -148,7 +187,31 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-	// FITUR : BACKUP / EXPORT (YANG DIPERBAIKI)
+		} else if hasPrefixAny(pesanLower, []string{"dashboard", "admin", "panel", "login"}) {
+		
+		// Buat Token JWT berlaku 15 menit
+		expirationTime := time.Now().Add(15 * time.Minute)
+		claims := &jwt.MapClaims{
+			"user_phone": sender,
+			"role":       "user",
+			"exp":        expirationTime.Unix(),
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		
+		// Pastikan ada JWT_SECRET di .env atau hardcode sementara kalau kepepet
+		jwtSecret := os.Getenv("JWT_SECRET")
+		if jwtSecret == "" {
+			jwtSecret = "RAHASIA_NEGARA_KAWAI_2024" // Default key jangan sampai lupa ganti
+		}
+		tokenString, _ := token.SignedString([]byte(jwtSecret))
+
+		// Buat Link
+		// Ganti domain ini dengan domain frontend kamu nanti
+		magicLink := fmt.Sprintf("https://kawai-frontend.vercel.app/auth/magic?token=%s", tokenString)
+
+		replyMsg = fmt.Sprintf("🎛 *DASHBOARD USER*\n\nKlik link di bawah ini untuk mengelola catatan & pengingat (Edit/Hapus/Rapikan):\n\n👉 %s\n\n_Link ini kedaluwarsa dalam 15 menit._", magicLink)
+
+	// FITUR : BACKUP / EXPORT 
 	} else if hasPrefixAny(pesanLower, []string{"backup", "export", "unduh"}) {
 
 		// 1. CEK APAKAH USER SUDAH PUNYA TOKEN?
@@ -361,30 +424,33 @@ Coba ketik waktu yang jelas ya, contohnya:
 	} else if hasPrefixAny(pesanLower, []string{"help", "bantuan", "halo", "menu", "p", "hi", "hai", "info"}) {
 		replyMsg = `🤖 *Kawai Assistant Menu*
 
-1️⃣ *BACKUP KE DRIVE* (Andalan! 🌟)
-   Ketik: _Backup_ atau _Export_
-   👉 Upload rekap catatan ke Google Drive.
-
-2️⃣ *SIMPAN CATATAN* 📝
+1️⃣ *SIMPAN CATATAN* 📝
    Keyword: _Catat, Simpan_
    👉 _Catat ide skripsi bab 1_
    👉 _Simpan Link Zoom https://zoom.us_
 
-3️⃣ *LIHAT DATA* 📂
+2️⃣ *LIHAT DATA* 📂
    Keyword: _List, Menu_
    👉 _List_ (Lihat semua)
    👉 _List Link_ (Khusus link)
+3️⃣ *BACA CATATAN* 📖
+   Keyword: _Baca, Show_
+   👉 _Baca 1_ (Untuk baca no 1)
 
-4️⃣ *BACA DETAIL*
-   Keyword: _(Ketik Nomornya Saja)_
-   👉 _1_ (Untuk baca no 1)
-
-5️⃣ *PENGINGAT* ⏰
+4️⃣ *PENGINGAT* ⏰
    Keyword: _Ingatkan, Ingat, Remind_
    ✅ _Ingatkan Rapat Besok jam 10_
    ✅ _Ingat bayar UKT Lusa 09.30_
    ✅ _Ingatkan tgl 17 Agustus 13:00_
    ✅ _Ingatkan masak mie 5 menit lagi_
+
+5️⃣ *DASHBOARD* 
+   Ketik: _Dashboard_
+   👉 Edit catatan & atur alarm lewat web.
+   
+6️⃣ *BACKUP DATA* 💾
+   Keyword: _Backup, Export_
+   👉 _Backup_ (Simpan semua catatan ke Google Drive)
 
 Selamat mencoba! 😊`
 	}

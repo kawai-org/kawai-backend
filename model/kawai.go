@@ -12,11 +12,12 @@ import (
 
 // 1. users: Data induk pengguna
 type User struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	PhoneNumber string             `bson:"phone_number" json:"phone_number"`
 	Name        string             `bson:"name" json:"name"`
-	Role        string             `bson:"role" json:"role"` // "admin", "user"
-	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
+	Role        string             `bson:"role,omitempty" json:"role,omitempty"`         // Field Baru
+	Password    string             `bson:"password,omitempty" json:"password,omitempty"` // Field Baru
+	CreatedAt   time.Time          `bson:"created_at,omitempty" json:"created_at,omitempty"`
 }
 
 // 2. bot_profiles: Konfigurasi Bot (Token WA, URL API)
@@ -107,4 +108,18 @@ type DriveFile struct {
 	MimeType     string             `bson:"mime_type"` // pdf, image/jpeg
 	DriveLink    string             `bson:"drive_link"`
 	UploadedAt   time.Time          `bson:"uploaded_at"`
+}
+
+type FAQ struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	Question  string             `bson:"question" json:"question"` // Keyword, misal: "biaya kuliah"
+	Answer    string             `bson:"answer" json:"answer"`     // Jawaban bot
+	CreatedBy string             `bson:"created_by" json:"created_by"` // "admin"
+}
+
+// Struct untuk Data Dashboard (Gabungan/Join)
+type DashboardStats struct {
+    TotalUsers    int64 `json:"total_users"`
+    TotalNotes    int64 `json:"total_notes"`
+    TotalMessages int64 `json:"total_messages"`
 }

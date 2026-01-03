@@ -4,9 +4,9 @@ package model
 type PushWaIncoming struct {
 	DeviceNumber string `json:"deviceNumber"`
 	Message      string `json:"message"`
+	PushName string `json:"pushname"`
 	From         string `json:"from"` 
 	
-	// 🔥 UPDATE: Support berbagai variasi nama field dari Gateway
 	FileUrl      string `json:"file_url,omitempty"`  // Versi 1
 	Url          string `json:"url,omitempty"`       // Versi 2 (Sering dipakai)
 	

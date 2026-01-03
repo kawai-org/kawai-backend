@@ -1,15 +1,55 @@
 package route
 
 import (
+	"context"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/kawai-org/kawai-backend/config"
 	"github.com/kawai-org/kawai-backend/controller"
 )
 
+// --- MIDDLEWARE AUTHENTICATION ---
+// Fungsi ini mengecek apakah User membawa "Karcis" (Token) yang valid
+func MiddlewareAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 1. Ambil Header Authorization
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Unauthorized: Token tidak ditemukan", http.StatusUnauthorized)
+			return
+		}
+
+		// 2. Format harus "Bearer <token>"
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			http.Error(w, "Unauthorized: Format token salah", http.StatusUnauthorized)
+			return
+		}
+		tokenString := parts[1]
+
+		// 3. Validasi Token dengan Secret Key
+		claims := jwt.MapClaims{}
+		token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
+			return []byte(os.Getenv("JWT_SECRET")), nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Unauthorized: Token tidak valid atau expired", http.StatusUnauthorized)
+			return
+		}
+
+		// 4. Simpan Data User (No HP / Role) ke Context agar bisa dibaca Controller
+		ctx := context.WithValue(r.Context(), "user", claims)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+// --- ROUTING URL ---
 func URL(w http.ResponseWriter, r *http.Request) {
-	// CORS Config
+	// CORS Config (Agar frontend bisa akses)
 	if config.SetAccessControlHeaders(w, r) {
 		return
 	}
@@ -19,33 +59,37 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	method := r.Method
 
 	switch {
-	// Route untuk Webhook WhatsApp (Menerima Pesan)
+	
+	// 1. WEBHOOK WHATSAPP
 	case method == "POST" && strings.HasPrefix(path, "/webhook/nomor/"):
 		controller.PostInboxNomor(w, r)
 
-	// Route untuk Cron Job (Pengingat Otomatis)
+	// 2. AUTH ADMIN (Login Web)
+	case method == "POST" && path == "/api/admin/login":
+		controller.LoginAdmin(w, r)
+
+	// 3. DASHBOARD USER (Perlu Login -> Pakai Middleware)
+	// User melihat catatan miliknya sendiri
+	case method == "GET" && path == "/api/dashboard/notes":
+		MiddlewareAuth(controller.GetMyNotes)(w, r)
+
+	// 4. ADMIN PANEL (Perlu Login -> Pakai Middleware)
+	// Admin melihat daftar semua user
+	case method == "GET" && path == "/api/admin/users":
+		MiddlewareAuth(controller.GetAllUsers)(w, r)
+
+	// 5. CRON JOB & GOOGLE AUTH (Existing)
 	case method == "GET" && path == "/api/cron":
 		controller.HandleCron(w, r)
-
-	// Login Google: User diarahkan ke Google
 	case method == "GET" && path == "/api/auth/google/login":
 		controller.GoogleLogin(w, r)
-
-	// Callback Google: Menerima kode dari Google
 	case method == "GET" && path == "/api/auth/google/callback":
 		controller.GoogleCallback(w, r)
-	
 
-	// case method == "POST" && path == "/api/register":
-	// 	controller.Register(w, r)
-	// case method == "POST" && path == "/api/login":
-	// 	controller.Login(w, r)
-
-	// Route Home / Cek Status
+	// 6. HOME
 	case method == "GET" && path == "/":
 		controller.GetHome(w, r)
 
-	// Default 404
 	default:
 		controller.NotFound(w, r)
 	}
