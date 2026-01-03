@@ -6,10 +6,8 @@ type PushWaIncoming struct {
 	Message      string `json:"message"`
 	PushName string `json:"pushname"`
 	From         string `json:"from"` 
-	
 	FileUrl      string `json:"file_url,omitempty"`  // Versi 1
 	Url          string `json:"url,omitempty"`       // Versi 2 (Sering dipakai)
-	
 	MimeType     string `json:"mimetype,omitempty"`  // Versi 1
 	MimeType2    string `json:"mime_type,omitempty"` // Versi 2
 }

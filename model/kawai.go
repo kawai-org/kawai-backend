@@ -6,9 +6,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// ==========================================
-// KELOMPOK 1: USER & SYSTEM (3 Tabel)
-// ==========================================
 
 // 1. users: Data induk pengguna
 type User struct {
@@ -20,7 +17,7 @@ type User struct {
 	CreatedAt   time.Time          `bson:"created_at,omitempty" json:"created_at,omitempty"`
 }
 
-// 2. bot_profiles: Konfigurasi Bot (Token WA, URL API)
+// 2. bot_profiles: Konfigurasi Bot 
 type BotProfile struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Token       string             `bson:"token" json:"token"`
@@ -37,9 +34,7 @@ type MessageLog struct {
 	ReceivedAt time.Time          `bson:"received_at" json:"received_at"`
 }
 
-// ==========================================
-// KELOMPOK 2: CORE FEATURES (Catatan) (4 Tabel)
-// ==========================================
+
 
 // 4. notes: Tabel utama catatan & hybrid reminder
 type Note struct {
@@ -75,9 +70,8 @@ type Category struct {
 	Name string             `bson:"name" json:"name"` // "Kuliah", "Pribadi"
 }
 
-// ==========================================
-// KELOMPOK 3: REMINDER & GOOGLE DRIVE (3 Tabel)
-// ==========================================
+// KELOMPOK 3: REMINDER & GOOGLE DRIVE 
+
 
 // 8. reminders: Jadwal Pengingat (Cron Job)
 type Reminder struct {
@@ -89,7 +83,6 @@ type Reminder struct {
 }
 
 // 9. google_tokens: Kunci Akses ke Google Drive User
-// (Pengganti CredentialRecord yang lama)
 type GoogleToken struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty"`
 	UserPhone    string             `bson:"user_phone"`
@@ -108,13 +101,6 @@ type DriveFile struct {
 	MimeType     string             `bson:"mime_type"` // pdf, image/jpeg
 	DriveLink    string             `bson:"drive_link"`
 	UploadedAt   time.Time          `bson:"uploaded_at"`
-}
-
-type FAQ struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Question  string             `bson:"question" json:"question"` // Keyword, misal: "biaya kuliah"
-	Answer    string             `bson:"answer" json:"answer"`     // Jawaban bot
-	CreatedBy string             `bson:"created_by" json:"created_by"` // "admin"
 }
 
 // Struct untuk Data Dashboard (Gabungan/Join)
