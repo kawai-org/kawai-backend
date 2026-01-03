@@ -60,23 +60,31 @@ func URL(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	
-	// 1. WEBHOOK WHATSAPP
+	// 1. WEBHOOK
 	case method == "POST" && strings.HasPrefix(path, "/webhook/nomor/"):
 		controller.PostInboxNomor(w, r)
 
-	// 2. AUTH ADMIN (Login Web)
+	// 2. ADMIN LOGIN
 	case method == "POST" && path == "/api/admin/login":
 		controller.LoginAdmin(w, r)
-
-	// 3. DASHBOARD USER (Perlu Login -> Pakai Middleware)
-	// User melihat catatan miliknya sendiri
-	case method == "GET" && path == "/api/dashboard/notes":
-		MiddlewareAuth(controller.GetMyNotes)(w, r)
-
-	// 4. ADMIN PANEL (Perlu Login -> Pakai Middleware)
-	// Admin melihat daftar semua user
 	case method == "GET" && path == "/api/admin/users":
 		MiddlewareAuth(controller.GetAllUsers)(w, r)
+
+	// 3. DASHBOARD USER - NOTES (CRUD)
+	case method == "GET" && path == "/api/dashboard/notes":
+		MiddlewareAuth(controller.GetMyNotes)(w, r)
+	
+	// Handle Update & Delete Note (Pakai HasPrefix karena ada ID dibelakangnya)
+	case method == "PUT" && strings.HasPrefix(path, "/api/notes/"):
+		MiddlewareAuth(controller.UpdateNote)(w, r)
+	case method == "DELETE" && strings.HasPrefix(path, "/api/notes/"):
+		MiddlewareAuth(controller.DeleteNote)(w, r)
+
+	// 4. DASHBOARD USER - REMINDERS (CRUD)
+	case method == "GET" && path == "/api/dashboard/reminders":
+		MiddlewareAuth(controller.GetReminders)(w, r)
+	case method == "PUT" && strings.HasPrefix(path, "/api/reminders/"):
+		MiddlewareAuth(controller.UpdateReminder)(w, r)
 
 	// 5. CRON JOB & GOOGLE AUTH (Existing)
 	case method == "GET" && path == "/api/cron":
