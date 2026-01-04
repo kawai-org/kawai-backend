@@ -55,6 +55,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.HandleCron(w, r)
 	case method == "POST" && path == "/api/admin/login": // Login Admin
 		controller.LoginAdmin(w, r)
+	case method == "POST" && path == "/api/register":
+        controller.Register(w, r)
 
 	// --- GOOGLE AUTH ---
 	case method == "GET" && path == "/api/auth/google/login":

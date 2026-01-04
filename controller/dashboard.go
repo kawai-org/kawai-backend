@@ -259,7 +259,7 @@ func DeleteReminder(w http.ResponseWriter, r *http.Request) {
 func isAdmin(r *http.Request) bool {
 	claims := getUserClaims(r)
 	role, ok := claims["role"].(string)
-	return ok && role == "admin" // Hapus super_admin, simple aja
+	return ok && role == "admin" 
 }
 
 // 1. LIHAT SEMUA USER (Untuk Audit/Monitoring)
