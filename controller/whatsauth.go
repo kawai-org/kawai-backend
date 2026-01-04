@@ -207,7 +207,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
     tokenString, _ := token.SignedString([]byte(jwtSecret))
 
 	fmt.Printf("\n[MAGIC LINK]\nUser: %s\nToken: %s\nLink: https://kawai-frontend.vercel.app/auth/magic?token=%s\n\n", sender, tokenString, tokenString)
-	// ----------------------------------
+	
 
     // 3. Buat Magic Link
     // Pastikan domain ini sesuai dengan frontend kamu nanti
