@@ -323,14 +323,18 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			foundTags := extractTags(content)
 
 			noteType := "text"
+			tipsMsg := "(Tips: Gunakan _#hashtag_ biar gampang dicari nanti!)"
+
 			if foundURL != "" {
 				if content == foundURL {
 					noteType = "link"
+					tipsMsg = "(Lain kali, tambahkan judul biar gak lupa ya. Contoh: *Catat Link Zoom https://...*)"
 				} else {
 					noteType = "mixed"
 				}
 			}
 
+			// Simpan Note Utama
 			noteID := primitive.NewObjectID()
 			atdb.InsertOneDoc(config.Mongoconn, "notes", model.Note{
 				ID: noteID, UserPhone: sender, Original: pesan, Content: content, Type: noteType, CreatedAt: time.Now(),
@@ -350,16 +354,31 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					ID: primitive.NewObjectID(), NoteID: noteID, TagName: t, UserPhone: sender,
 				})
 			}
-			replyMsg = "✅ Tersimpan! Ketik *List* untuk melihat."
+			replyMsg = fmt.Sprintf("✅ *Tersimpan!*\n\n💡 *Tips:* Ketik *List* untuk melihat catatanmu.\n%s", tipsMsg)
 		} else {
-			replyMsg = "Format salah. Ketik: *Catat [isi]*"
+			replyMsg = "⚠️ Format salah.\nContoh: *Catat ide skripsi #kuliah*"
 		}
 
 	// FITUR B: LIST
 	} else if hasPrefixAny(pesanLower, []string{"list", "menu", "tampilkan"}) {
-		filter := bson.M{"user_phone": sender}
-		opts := options.Find().SetLimit(10).SetSort(bson.M{"created_at": -1})
+		//Logika Halaman (Page)
+		page := 1
+		parts := strings.Fields(pesan)
+		if len(parts) > 1 {
+			// Cek apakah kata terakhir adalah angka? (Misal: "List 2")
+			if num, err := strconv.Atoi(parts[len(parts)-1]); err == nil && num > 0 {
+				page = num
+			}
+		}
 
+		// Hitung Skip & Limit
+		limit := int64(10)
+		skip := int64((page - 1) * 10)
+		
+		filter := bson.M{"user_phone": sender}
+		opts := options.Find().SetLimit(limit).SetSkip(skip).SetSort(bson.M{"created_at": -1})
+
+		// --- OPSI B1: LIST LINK ---
 		if strings.Contains(pesanLower, "link") {
 			cursor, _ := config.Mongoconn.Collection("links").Find(context.TODO(), filter, opts)
 			var links []model.Link
@@ -368,47 +387,98 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 			}
 			if len(links) > 0 {
 				var sb strings.Builder
-				sb.WriteString("🔗 *Koleksi Link*\n")
+				sb.WriteString(fmt.Sprintf("🔗 *Koleksi Link (Hal %d)*\n", page))
+				sb.WriteString("------------------\n")
+
 				for i, l := range links {
-					sb.WriteString(fmt.Sprintf("\n%d. %s\n   %s", i+1, l.Title, l.URL))
+					nomorUrut := int(skip) + i + 1
+					judul := l.Title
+					if len(judul) > 30 { judul = judul[:30] + "..." } // Potong judul panjang
+					sb.WriteString(fmt.Sprintf("%d. %s\n   %s\n", nomorUrut, judul, l.URL))
 				}
+				sb.WriteString("------------------\n")
+				sb.WriteString(fmt.Sprintf("_Ketik *List Link %d* untuk halaman berikutnya._", page+1))
 				replyMsg = sb.String()
 			} else {
-				replyMsg = "Belum ada link."
+				if page == 1 {
+					replyMsg = "📭 Belum ada link yang disimpan."
+				} else {
+					replyMsg = "🚫 Sudah tidak ada link di halaman ini."
+				}
 			}
+			// --- OPSI B2: LIST CATATAN (DEFAULT) ---
 		} else {
 			cursor, _ := config.Mongoconn.Collection("notes").Find(context.TODO(), filter, opts)
 			var notes []model.Note
 			if cursor != nil {
 				cursor.All(context.TODO(), &notes)
 			}
+
 			if len(notes) > 0 {
 				var sb strings.Builder
-				sb.WriteString("📂 *Catatan Terkini*\n")
+				sb.WriteString(fmt.Sprintf("📂 *Catatan (Hal %d)*\n", page))
+				sb.WriteString("------------------\n")
+
 				for i, n := range notes {
-					display := n.Content
+					nomorUrut := int(skip) + i + 1
+
+					// Rapikan Tampilan Konten
+					display := strings.ReplaceAll(n.Content, "\n", " ")
 					if len(display) > 35 {
 						display = display[:35] + "..."
 					}
-					sb.WriteString(fmt.Sprintf("\n%d. %s", i+1, display))
+
+					// Tambah Ikon & Tanggal
+					icon := "📝"
+					if n.Type == "link" { icon = "🔗" }
+					if n.Type == "reminder" { icon = "⏰" }
+					tgl := n.CreatedAt.Format("02 Jan")
+
+					sb.WriteString(fmt.Sprintf("%d. %s %s (%s)\n", nomorUrut, icon, display, tgl))
 				}
-				sb.WriteString("\n\n💡 Ketik *Backup* untuk simpan semua ke Drive!")
+				sb.WriteString("------------------\n")
+				
+				sb.WriteString("\n💡 Ketik *Backup* untuk simpan semua ke Drive!\n")
+				sb.WriteString(fmt.Sprintf("👉 Ketik nomornya (contoh: *%d*) untuk baca detail.\n", int(skip)+1))
+				sb.WriteString(fmt.Sprintf("👉 Ketik *List %d* untuk next page.", page+1))
 				replyMsg = sb.String()
 			} else {
-				replyMsg = "Belum ada catatan."
+				if page == 1 {
+					replyMsg = "📭 Belum ada catatan.\nYuk ketik: *Catat [Isi Pesan][Tag]*"
+				} else {
+					replyMsg = "🚫 Sudah tidak ada catatan di halaman ini."
+				}
 			}
 		}
 
 	// FITUR C: BACA DETAIL
 	} else if isNumberOnly {
+		// Hitung posisi skip berdasarkan input user
 		skip := int64(targetNo - 1)
+
 		opts := options.FindOne().SetSkip(skip).SetSort(bson.M{"created_at": -1})
 		var note model.Note
 		errDB := config.Mongoconn.Collection("notes").FindOne(context.TODO(), bson.M{"user_phone": sender}, opts).Decode(&note)
+
 		if errDB == nil {
-			replyMsg = fmt.Sprintf("📂 *DETAIL NO. %d*\n\n%s", targetNo, note.Content)
+			tgl := note.CreatedAt.Format("02 Jan 2006 • 15:04 WIB")
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("📂 *DETAIL NO. %d*\n", targetNo))
+			sb.WriteString(fmt.Sprintf("📅 %s\n🏷️ Tipe: %s\n", tgl, note.Type))
+			sb.WriteString("----------------------\n")
+			sb.WriteString(note.Content)
+			sb.WriteString("\n----------------------")
+			// Jika tipe link/mixed, tampilkan URL-nya lagi biar bisa diklik
+			if note.Type == "link" || note.Type == "mixed" {
+				url := extractURL(note.Content) 
+				if url != "" {
+					sb.WriteString(fmt.Sprintf("\n🔗 *Link:* %s", url))
+				}
+			}
+			
+			replyMsg = sb.String()
 		} else {
-			replyMsg = "❌ Data tidak ditemukan."
+			replyMsg = "❌ Data nomor tersebut tidak ditemukan."
 		}
 
 	// FITUR D: REMINDER
@@ -454,9 +524,9 @@ Coba ketik waktu yang jelas ya, contohnya:
    Keyword: _List, Menu_
    👉 _List_ (Lihat semua)
    👉 _List Link_ (Khusus link)
-3️⃣ *BACA CATATAN* 📖
-   Keyword: _Baca, Show_
-   👉 _Baca 1_ (Untuk baca no 1)
+3️⃣ *BACA DETAIL CATATAN* 📖
+   Keyword: _(ketik Nomornya Saja)_ 
+   👉 _1_ (Untuk baca no 1)
 
 4️⃣ *PENGINGAT* ⏰
    Keyword: _Ingatkan, Ingat, Remind_
@@ -488,7 +558,7 @@ Selamat mencoba! 😊`
 }
 
 func NotFound(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json") // Tambahan bagus
+    w.Header().Set("Content-Type", "application/json") 
 	w.WriteHeader(http.StatusNotFound)                
 	json.NewEncoder(w).Encode(model.Response{Response: "404 Not Found"})
 }
