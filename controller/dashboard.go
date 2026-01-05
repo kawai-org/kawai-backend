@@ -169,33 +169,44 @@ func DeleteNote(w http.ResponseWriter, r *http.Request) {
 
 // --- REMINDERS ---
 
+// --- REMINDERS ---
+
 func GetReminders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)
 	userPhone, _ := claims["user_phone"].(string)
 
+	// 1. Ambil Keyword Search (Tambahan Baru)
 	keyword := r.URL.Query().Get("search")
 
 	filter := bson.M{"user_phone": userPhone}
 
-	// Logika Search untuk Reminder (Cari berdasarkan Judul)
+	// 2. Logika Search Regex (Cari berdasarkan Judul)
 	if keyword != "" {
 		filter["title"] = bson.M{
 			"$regex":   keyword,
-			"$options": "i",
+			"$options": "i", // Case insensitive (Huruf besar/kecil dianggap sama)
 		}
 	}
 
+	// Sort berdasarkan waktu reminder terdekat
 	opts := options.Find().SetSort(bson.M{"scheduled_time": 1})
 
-	cursor, _ := config.Mongoconn.Collection("reminders").Find(context.TODO(), filter, opts)
-	
+	cursor, err := config.Mongoconn.Collection("reminders").Find(context.TODO(), filter, opts)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "DB Error"})
+		return
+	}
+
 	reminders := []model.Reminder{}
 	if cursor != nil {
 		cursor.All(context.TODO(), &reminders)
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "data": reminders})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "success", 
+		"data": reminders,
+	})
 }
 
 func UpdateReminder(w http.ResponseWriter, r *http.Request) {
