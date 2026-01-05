@@ -354,7 +354,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					ID: primitive.NewObjectID(), NoteID: noteID, TagName: t, UserPhone: sender,
 				})
 			}
-			replyMsg = fmt.Sprintf("✅ *Tersimpan!*\n\n💡 *Tips:* Ketik *List* untuk melihat catatanmu.\n%s", tipsMsg)
+			replyMsg = fmt.Sprintf("✅ *Tersimpan!*\n\n💡 *Tips:* Ketik *List* untuk melihat catatanmu *List Link*(Khusus link).\n%s", tipsMsg)
 		} else {
 			replyMsg = "⚠️ Format salah.\nContoh: *Catat ide skripsi #kuliah*"
 		}
