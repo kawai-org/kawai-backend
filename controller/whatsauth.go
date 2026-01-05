@@ -508,7 +508,57 @@ Coba ketik waktu yang jelas ya, contohnya:
 			replyMsg = fmt.Sprintf("⏰ *Pengingat Diset!*\n\n📌 Topik: %s\n⏳ Waktu: %s", title, timeStr)
 		}
 
-	// FITUR E: BANTUAN
+	// FITUR E: PENCARIAN (SEARCH)
+	} else if hasPrefixAny(pesanLower, []string{"cari", "search", "find"}) || strings.HasPrefix(pesan, "#") {
+		// Ambil keyword
+		keyword := pesan
+		// Jika user ketik "Cari #resep", ambil "#resep"-nya saja
+		// Tapi kalau user ketik "#resep" langsung, ya sudah itu keywordnya.
+		if hasPrefixAny(pesanLower, []string{"cari", "search", "find"}) {
+			parts := strings.Fields(pesan)
+			if len(parts) > 1 {
+				keyword = strings.Join(parts[1:], " ")
+			}
+		}
+
+		// Cari di Database (Regex case insensitive)
+		filter := bson.M{
+			"user_phone": sender,
+			"content": bson.M{
+				"$regex":   keyword,
+				"$options": "i",
+			},
+		}
+		
+		// Batasi 5 hasil teratas biar chat gak penuh
+		opts := options.Find().SetLimit(5).SetSort(bson.M{"created_at": -1})
+		
+		cursor, _ := config.Mongoconn.Collection("notes").Find(context.TODO(), filter, opts)
+		var results []model.Note
+		if cursor != nil {
+			cursor.All(context.TODO(), &results)
+		}
+
+		if len(results) > 0 {
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("🔍 *Hasil Pencarian: \"%s\"*\n", keyword))
+			sb.WriteString("------------------\n")
+			for i, n := range results {
+				// Rapikan tampilan
+				display := strings.ReplaceAll(n.Content, "\n", " ")
+				if len(display) > 40 { display = display[:40] + "..." }
+				
+				tgl := n.CreatedAt.Format("02/01")
+				sb.WriteString(fmt.Sprintf("%d. %s (%s)\n", i+1, display, tgl))
+			}
+			sb.WriteString("------------------\n")
+			sb.WriteString("👉 Ketik *List* untuk lihat semua.")
+			replyMsg = sb.String()
+		} else {
+			replyMsg = fmt.Sprintf("❌ Tidak ditemukan catatan dengan kata kunci: *%s*", keyword)
+		}
+
+	// FITUR F: BANTUAN
 	} else if hasPrefixAny(pesanLower, []string{"help", "bantuan", "halo", "menu", "p", "hi", "hai", "info"}) {
 		replyMsg = `🤖 *Kawai Assistant Menu*
 
