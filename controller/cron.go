@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/kawai-org/kawai-backend/config"
@@ -49,6 +50,18 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 
 	count := 0
 	for _, rem := range reminders {
+
+		// --- TAMBAHAN: FILTER NOMOR ---
+        // Jika nomor tidak berawalan "62" (atau kode negara lain yang valid), 
+        // anggap itu LID/Invalid dan JANGAN KIRIM.
+        if !strings.HasPrefix(rem.UserPhone, "62") {
+            fmt.Printf("⚠️ Skip Reminder ke ID Laptop/Invalid: %s (Topik: %s)\n", rem.UserPhone, rem.Title)
+            
+            //  Tandai error di DB supaya tidak diproses lagi
+             update := bson.M{"$set": bson.M{"status": "failed_invalid_number"}}
+            config.Mongoconn.Collection("reminders").UpdateOne(context.TODO(), bson.M{"_id": rem.ID}, update)
+            continue 
+        }
 		
 		// Konversi waktu dari DB (UTC) ke WIB sebelum ditampilkan
 		waktuWIB := rem.ScheduledTime.In(loc)

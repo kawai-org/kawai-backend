@@ -117,9 +117,9 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 
 	// Jika Sender terlihat seperti LID (panjang > 15 digit dan diawali angka 1-9 selain 62)
     // Cek apakah ada field ChatID yang membawa nomor asli
-    if len(sender) > 15 && msg.ChatID != "" {
+    if msg.ChatID != "" {
         sender = msg.ChatID
-    } else if len(sender) > 15 && msg.RemoteJID != "" {
+    } else if msg.RemoteJID != "" {
         sender = msg.RemoteJID
     }
 
@@ -127,6 +127,10 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(sender, "@") {
 		sender = strings.Split(sender, "@")[0]
 	}
+	
+	if strings.Contains(sender, ":") {
+        sender = strings.Split(sender, ":")[0]
+    }
 	
 	// Antisipasi jika PushName kosong dari WA
 	userName := msg.PushName
