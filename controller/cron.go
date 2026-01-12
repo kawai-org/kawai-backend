@@ -51,13 +51,24 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 	count := 0
 	for _, rem := range reminders {
 
-		// --- TAMBAHAN: FILTER NOMOR ---
-        // Jika nomor tidak berawalan "62" (atau kode negara lain yang valid), 
-        // anggap itu LID/Invalid dan JANGAN KIRIM.
-        if !strings.HasPrefix(rem.UserPhone, "62") {
+		allowedIDs := []string{
+            "233332956778603", 
+            "86818838044906",   
+        }
+
+        isAllowed := false
+        for _, id := range allowedIDs {
+            if rem.UserPhone == id {
+                isAllowed = true
+                break
+            }
+        }
+
+        // Logika Baru: Jika BUKAN awalan 62 DAN BUKAN ID yang dibolehkan, baru di-skip.
+        if !strings.HasPrefix(rem.UserPhone, "62") && !isAllowed {
             fmt.Printf("⚠️ Skip Reminder ke ID Laptop/Invalid: %s (Topik: %s)\n", rem.UserPhone, rem.Title)
             
-            //  Tandai error di DB supaya tidak diproses lagi
+            // Tandai error di DB
              update := bson.M{"$set": bson.M{"status": "failed_invalid_number"}}
             config.Mongoconn.Collection("reminders").UpdateOne(context.TODO(), bson.M{"_id": rem.ID}, update)
             continue 
