@@ -26,7 +26,11 @@ type PushWaSend struct {
 
 // 3. Response Standar API
 type Response struct {
-	Status  bool   `json:"status"`
 	Response string `json:"response"`
-	Message  string `json:"message"`
+}
+
+// 4. Struktur Respon Khusus untuk menangkap balasan dari API di Cron
+type APIResponse struct {
+    Status  interface{} `json:"status"`
+    Message string      `json:"message"`
 }
