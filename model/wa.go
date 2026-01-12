@@ -6,6 +6,9 @@ type PushWaIncoming struct {
 	Message      string `json:"message"`
 	PushName string `json:"pushname"`
 	From         string `json:"from"` 
+	ChatID       string `json:"chat_id,omitempty"` 
+    RemoteJID    string `json:"remote_jid,omitempty"`
+    Participant  string `json:"participant,omitempty"`
 	FileUrl      string `json:"file_url,omitempty"`  // Versi 1
 	Url          string `json:"url,omitempty"`       // Versi 2 (Sering dipakai)
 	MimeType     string `json:"mimetype,omitempty"`  // Versi 1
@@ -23,5 +26,7 @@ type PushWaSend struct {
 
 // 3. Response Standar API
 type Response struct {
+	Status  bool   `json:"status"`
 	Response string `json:"response"`
+	Message  string `json:"message"`
 }

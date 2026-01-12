@@ -49,7 +49,7 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 
 	count := 0
 	for _, rem := range reminders {
-		// 🔥 PERBAIKAN TIMEZONE 🔥
+		
 		// Konversi waktu dari DB (UTC) ke WIB sebelum ditampilkan
 		waktuWIB := rem.ScheduledTime.In(loc)
 
@@ -67,14 +67,28 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 			Message: pesan,
 		}
 		
-		_, _, errSend := atapi.PostJSON[interface{}](kirim, profile.URLApi)
+		statusCode, apiRes, errSend := atapi.PostJSON[model.APIResponse](kirim, profile.URLApi)
+
+		isSuccess := false
 		
-		if errSend == nil {
-			update := bson.M{"$set": bson.M{"status": "sent"}}
-			config.Mongoconn.Collection("reminders").UpdateOne(context.TODO(), bson.M{"_id": rem.ID}, update)
-			count++
-		}
-	}
+		if errSend == nil && statusCode == 200 {
+		// Cek isi pesan respon dari API
+            // Jika status sukses (biasanya true atau "success") dan tidak ada pesan error fatal
+            if apiRes.Message != "Invalid number" && apiRes.Message != "Target not found" {
+                isSuccess = true
+            } else {
+                fmt.Printf("Gagal Kirim (API Reject) ke %s: %s\n", rem.UserPhone, apiRes.Message)
+            }
+        } else {
+            fmt.Printf("Gagal Kirim (Network Error) ke %s: %v\n", rem.UserPhone, errSend)
+        }
+
+        if isSuccess {
+            update := bson.M{"$set": bson.M{"status": "sent"}}
+            config.Mongoconn.Collection("reminders").UpdateOne(context.TODO(), bson.M{"_id": rem.ID}, update)
+            count++
+        }
+    }
 
 	resp := map[string]interface{}{
 		"status":    "success",

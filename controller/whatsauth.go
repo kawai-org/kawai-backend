@@ -114,6 +114,16 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	// 2. Sanitasi & Simpan User
 	msg.Message = fixUTF8(msg.Message)
 	sender := msg.From
+
+	// Jika Sender terlihat seperti LID (panjang > 15 digit dan diawali angka 1-9 selain 62)
+    // Cek apakah ada field ChatID yang membawa nomor asli
+    if len(sender) > 15 && msg.ChatID != "" {
+        sender = msg.ChatID
+    } else if len(sender) > 15 && msg.RemoteJID != "" {
+        sender = msg.RemoteJID
+    }
+
+	// Bersihkan suffix @s.whatsapp.net atau @lid
 	if strings.Contains(sender, "@") {
 		sender = strings.Split(sender, "@")[0]
 	}
