@@ -30,3 +30,7 @@ func TestSetEnv(t *testing.T) {
 	// Memanggil fungsi SetEnv agar terhitung dalam coverage
 	SetEnv()
 }
+func TestSetEnvForce(t *testing.T) {
+	// Memanggil fungsi SetEnv agar terhitung dalam coverage
+    SetEnv()
+}

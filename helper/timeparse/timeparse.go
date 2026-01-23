@@ -52,19 +52,21 @@ func ParseNaturalTime(text string) (time.Time, string) {
 		satuan := matchDur[2]
 		
 		var nilai float64
-		if angkaStr == "se" || angkaStr == "satu" || angkaStr == "sebuah" {
+		switch angkaStr {
+		case "se", "satu", "sebuah":
 			nilai = 1
-		} else if angkaStr == "setengah" {
+		case "setengah", "sth", "setngah", "sthng":
 			nilai = 0.5
-		} else {
+		default:
 			nilai, _ = strconv.ParseFloat(angkaStr, 64)
 		}
 
-		if satuan == "jam" || satuan == "jm" {
+		switch satuan {
+		case "jam", "jm":
 			targetTime = targetTime.Add(time.Duration(nilai * float64(time.Hour)))
-		} else if satuan == "menit" || satuan == "mnt" {
+		case "menit", "mnt":
 			targetTime = targetTime.Add(time.Duration(nilai * float64(time.Minute)))
-		} else if satuan == "detik" || satuan == "dtk" {
+		case "detik", "dtk":
 			targetTime = targetTime.Add(time.Duration(nilai * float64(time.Second)))
 		}
 		
