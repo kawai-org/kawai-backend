@@ -569,7 +569,7 @@ Coba ketik waktu yang jelas ya, contohnya:
 				sb.WriteString(fmt.Sprintf("%d. %s (%s)\n", i+1, display, tgl))
 			}
 			sb.WriteString("------------------\n")
-			sb.WriteString(fmt.Sprintf("👉 Ketik *Cari 1 %s* [Angka] [KataKunci] -> cth: Cari 1 kuliah, untuk baca detail nomor 1.\n", keyword))
+			sb.WriteString(fmt.Sprintf("👉 Ketik *Cari 1 %s* untuk baca detail nomor 1.\n", keyword))
             sb.WriteString("👉 Ketik *List* untuk lihat semua catatan tersimpan.")
 			replyMsg = sb.String()
 		} else {
