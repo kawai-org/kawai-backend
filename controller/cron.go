@@ -15,6 +15,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+// HandleCron godoc
+// @Summary Cron Job (Pengingat Otomatis)
+// @Description Endpoint yang dipanggil setiap menit untuk mengecek alarm/reminder yang waktunya sudah tiba.
+// @Tags Cron
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Status pengiriman pengingat"
+// @Router /api/cron [get]
 // HandleCron adalah fungsi yang akan dipanggil setiap menit
 func HandleCron(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")

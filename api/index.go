@@ -9,6 +9,16 @@ import (
 	"github.com/kawai-org/kawai-backend/route"
 )
 
+// @title Kawai Assistant API
+// @version 1.0.0
+// @description Dokumentasi API Backend untuk Kawai Assistant (Bot WhatsApp & Dashboard).
+// @contact.name Dwi Puspa Firdaus
+// @host kawai-be.vercel.app
+// @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+
 // Handler adalah fungsi utama yang akan dipanggil oleh Vercel
 func Handler(w http.ResponseWriter, r *http.Request) {
 	// Inisialisasi Database (dilakukan setiap ada request atau bisa dioptimasi nanti)

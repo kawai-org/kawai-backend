@@ -95,6 +95,17 @@ func EnsureUserExists(phone, name string) {
 	config.Mongoconn.Collection("users").UpdateOne(context.TODO(), filter, update, opts)
 }
 
+// PostInboxNomor godoc
+// @Summary Webhook WhatsApp (PushWa)
+// @Description Endpoint untuk menerima pesan masuk dari WhatsApp melalui webhook.
+// @Tags Webhook
+// @Accept json
+// @Produce json
+// @Param nomor path string true "Nomor WhatsApp bot / penerima"
+// @Param request body model.ReqWA true "Payload pesan WhatsApp dari PushWa"
+// @Success 200 {object} map[string]string "Berhasil memproses pesan"
+// @Router /webhook/nomor/{nomor} [post]
+
 // --- LOGIKA UTAMA BOT ---
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
