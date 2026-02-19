@@ -498,6 +498,10 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	} else if hasPrefixAny(pesanLower, []string{"ingatkan", "remind", "ingat", "ing", "ingt"}) {
 		scheduledTime, title := timeparse.ParseNaturalTime(pesan)
 
+		if title == "" {
+			title = "Pengingat / Alarm (Tanpa Judul)"
+		}
+
 		if scheduledTime.IsZero() {
 			replyMsg = `🤔 *Waduh, saya kurang paham waktunya.*
 Coba ketik waktu yang jelas ya, contohnya:
