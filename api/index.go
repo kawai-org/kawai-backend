@@ -26,7 +26,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		DBString: os.Getenv("MONGOSTRING"),
 		DBName:   "kawai_db",
 	}
-	
+
 	// Pastikan koneksi db diisi ke config
 	config.Mongoconn, _ = atdb.MongoConnect(mconn)
 
