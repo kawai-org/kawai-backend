@@ -569,10 +569,58 @@ Coba ketik waktu yang jelas ya, contohnya:
 				sb.WriteString(fmt.Sprintf("%d. %s (%s)\n", i+1, display, tgl))
 			}
 			sb.WriteString("------------------\n")
-			sb.WriteString("👉 Ketik *List* untuk lihat semua.")
+			sb.WriteString(fmt.Sprintf("👉 Ketik *Cari 1 %s* [Angka] [KataKunci] -> cth: Cari 1 kuliah, untuk baca detail nomor 1.\n", keyword))
+            sb.WriteString("👉 Ketik *List* untuk lihat semua catatan tersimpan.")
 			replyMsg = sb.String()
 		} else {
 			replyMsg = fmt.Sprintf("❌ Tidak ditemukan catatan dengan kata kunci: *%s*", keyword)
+		}
+
+		// FITUR C2: BACA DETAIL DARI HASIL PENCARIAN
+	// Format: "Cari [Angka] [KataKunci]" -> cth: Cari 1 kuliah
+	} else if (strings.HasPrefix(pesanLower, "cari ") || strings.HasPrefix(pesanLower, "search ")) && len(strings.Fields(pesan)) >= 3 {
+		parts := strings.Fields(pesan)
+		targetNo, errNum := strconv.Atoi(parts[1]) // Ambil angka (contoh: 1)
+
+		if errNum == nil && targetNo > 0 {
+			keyword := strings.Join(parts[2:], " ") // Ambil sisa kata (contoh: kuliah)
+			skip := int64(targetNo - 1)
+
+			// Filter: User yang sama & Content mengandung kata kunci (Case Insensitive)
+			filter := bson.M{
+				"user_phone": sender,
+				"content": bson.M{
+					"$regex":   keyword,
+					"$options": "i",
+				},
+			}
+			opts := options.FindOne().SetSkip(skip).SetSort(bson.M{"created_at": -1})
+
+			var note model.Note
+			errDB := config.Mongoconn.Collection("notes").FindOne(context.TODO(), filter, opts).Decode(&note)
+
+			if errDB == nil {
+				tgl := note.CreatedAt.Format("02 Jan 2006 • 15:04 WIB")
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("🔍 *DETAIL PENCARIAN NO. %d*\n", targetNo))
+				sb.WriteString(fmt.Sprintf("Kunci: \"%s\"\n", keyword))
+				sb.WriteString(fmt.Sprintf("📅 %s\n🏷️ Tipe: %s\n", tgl, note.Type))
+				sb.WriteString("----------------------\n")
+				sb.WriteString(note.Content)
+				sb.WriteString("\n----------------------")
+				
+				if note.Type == "link" || note.Type == "mixed" {
+					url := extractURL(note.Content)
+					if url != "" {
+						sb.WriteString(fmt.Sprintf("\n🔗 *Link:* %s", url))
+					}
+				}
+				replyMsg = sb.String()
+			} else {
+				replyMsg = fmt.Sprintf("❌ Data nomor %d untuk pencarian '%s' tidak ditemukan.", targetNo, keyword)
+			}
+		} else {
+			replyMsg = "⚠️ Format salah. Contoh: *Cari 1 kuliah*"
 		}
 
 	// FITUR F: BANTUAN
