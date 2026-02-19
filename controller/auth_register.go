@@ -22,6 +22,16 @@ type RegisterInput struct {
 	SecretCode  string `json:"secret_code"` // Opsional: Untuk jadi Admin
 }
 
+// Register godoc
+// @Summary Registrasi User Baru
+// @Description Pendaftaran pengguna baru dengan nomor HP, nama, dan password
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param input body RegisterInput true "Data Registrasi"
+// @Success 200 {object} map[string]string "Status Registrasi"
+// @Failure 400 {object} map[string]string "Data tidak lengkap / User sudah ada"
+// @Router /api/register [post]
 func Register(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 

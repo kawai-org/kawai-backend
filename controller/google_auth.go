@@ -26,6 +26,13 @@ var googleOauthConfig = &oauth2.Config{
 
 // 1. HANDLER LOGIN: 
 
+// GoogleLogin godoc
+// @Summary Login Google
+// @Description Redirect ke halaman Login Google (OAuth2)
+// @Tags Auth
+// @Param phone query string true "Nomor HP User (State)"
+// @Success 307 "Redirect ke Google"
+// @Router /api/auth/google/login [get]
 func GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	// Ambil nomor HP dari parameter URL
 	userPhone := r.URL.Query().Get("phone")
@@ -50,6 +57,14 @@ func GoogleLogin(w http.ResponseWriter, r *http.Request) {
 
 // 2. HANDLER CALLBACK: Menerima Laporan dari Google
 // URL: /api/auth/google/callback
+// GoogleCallback godoc
+// @Summary Callback Google Auth
+// @Description Menerima kode otorisasi Google dan menukar dengan Token
+// @Tags Auth
+// @Param code query string true "Authorization Code"
+// @Param state query string true "User Phone Number"
+// @Success 200 {string} string "Halaman Sukses HTML"
+// @Router /api/auth/google/callback [get]
 func GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// Ambil data yang dikembalikan Google
 	code := r.URL.Query().Get("code")

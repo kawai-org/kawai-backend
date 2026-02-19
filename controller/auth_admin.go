@@ -20,6 +20,17 @@ type LoginInput struct {
 	Password string `json:"password"`
 }
 
+// LoginAdmin godoc
+// @Summary Login Admin
+// @Description Login untuk admin menggunakan nomor HP dan password
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param input body LoginInput true "Kredensial Login"
+// @Success 200 {object} map[string]interface{} "Token JWT dan Role"
+// @Failure 400 {object} map[string]string "Invalid Body"
+// @Failure 401 {object} map[string]string "Password Salah / Bukan Admin"
+// @Router /api/admin/login [post]
 func LoginAdmin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
     

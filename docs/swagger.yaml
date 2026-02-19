@@ -1,0 +1,459 @@
+basePath: /
+definitions:
+  controller.LoginInput:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  controller.RegisterInput:
+    properties:
+      name:
+        type: string
+      password:
+        type: string
+      phone_number:
+        type: string
+      secret_code:
+        description: 'Opsional: Untuk jadi Admin'
+        type: string
+    type: object
+  model.PushWaIncoming:
+    properties:
+      chat_id:
+        type: string
+      deviceNumber:
+        type: string
+      file_url:
+        description: Versi 1
+        type: string
+      from:
+        type: string
+      message:
+        type: string
+      mime_type:
+        description: Versi 2
+        type: string
+      mimetype:
+        description: Versi 1
+        type: string
+      participant:
+        type: string
+      pushname:
+        type: string
+      remote_jid:
+        type: string
+      url:
+        description: Versi 2 (Sering dipakai)
+        type: string
+    type: object
+  model.Response:
+    properties:
+      response:
+        type: string
+    type: object
+host: kawai-be.vercel.app
+info:
+  contact:
+    name: Dwi Puspa Firdaus
+  description: Dokumentasi API Backend untuk Kawai Assistant (Bot WhatsApp & Dashboard).
+  title: Kawai Assistant API
+  version: 1.0.0
+paths:
+  /:
+    get:
+      description: Cek status server
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Response'
+      summary: Home Endpoint
+      tags:
+      - Home
+  /api/admin/ban:
+    post:
+      consumes:
+      - application/json
+      description: Memblokir atau membuka blokir user
+      parameters:
+      - description: Target Phone & Action (ban/unban)
+        in: body
+        name: input
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: '[ADMIN] Ban User'
+      tags:
+      - Admin
+  /api/admin/login:
+    post:
+      consumes:
+      - application/json
+      description: Login untuk admin menggunakan nomor HP dan password
+      parameters:
+      - description: Kredensial Login
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/controller.LoginInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token JWT dan Role
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid Body
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Password Salah / Bukan Admin
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login Admin
+      tags:
+      - Auth
+  /api/admin/stats:
+    get:
+      description: Mengambil statistik sederhana sistem
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: '[ADMIN] Lihat Statistik'
+      tags:
+      - Admin
+  /api/admin/users:
+    get:
+      description: Mengambil semua data user yang terdaftar
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: '[ADMIN] Lihat Users'
+      tags:
+      - Admin
+  /api/auth/google/callback:
+    get:
+      description: Menerima kode otorisasi Google dan menukar dengan Token
+      parameters:
+      - description: Authorization Code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: User Phone Number
+        in: query
+        name: state
+        required: true
+        type: string
+      responses:
+        "200":
+          description: Halaman Sukses HTML
+          schema:
+            type: string
+      summary: Callback Google Auth
+      tags:
+      - Auth
+  /api/auth/google/login:
+    get:
+      description: Redirect ke halaman Login Google (OAuth2)
+      parameters:
+      - description: Nomor HP User (State)
+        in: query
+        name: phone
+        required: true
+        type: string
+      responses:
+        "307":
+          description: Redirect ke Google
+      summary: Login Google
+      tags:
+      - Auth
+  /api/cron:
+    get:
+      description: Endpoint yang dipanggil setiap menit untuk mengecek alarm/reminder
+        yang waktunya sudah tiba.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Status pengiriman pengingat
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Cron Job (Pengingat Otomatis)
+      tags:
+      - Cron
+  /api/dashboard/notes:
+    get:
+      description: Mendapatkan daftar catatan milik pengguna yang sedang login.
+      parameters:
+      - description: Keyword Pencarian
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Ambil Catatan User
+      tags:
+      - Dashboard
+  /api/dashboard/notes/{id}/detail:
+    get:
+      description: Melihat detail catatan beserta hashtagnya
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Detail Catatan
+      tags:
+      - Dashboard
+  /api/dashboard/reminders:
+    get:
+      description: Mengambil daftar pengingat yang akan datang.
+      parameters:
+      - description: Keyword Pencarian
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Ambil Agenda Pengingat
+      tags:
+      - Dashboard
+  /api/notes/{id}:
+    delete:
+      description: Menghapus catatan berdasarkan ID
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Hapus Catatan
+      tags:
+      - Dashboard
+    put:
+      consumes:
+      - application/json
+      description: Mengubah isi catatan
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Content baru
+        in: body
+        name: input
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update Catatan
+      tags:
+      - Dashboard
+  /api/register:
+    post:
+      consumes:
+      - application/json
+      description: Pendaftaran pengguna baru dengan nomor HP, nama, dan password
+      parameters:
+      - description: Data Registrasi
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/controller.RegisterInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Status Registrasi
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Data tidak lengkap / User sudah ada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Registrasi User Baru
+      tags:
+      - Auth
+  /api/reminders/{id}:
+    delete:
+      description: Menghapus pengingat berdasarkan ID
+      parameters:
+      - description: Reminder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Hapus Reminder
+      tags:
+      - Dashboard
+    put:
+      consumes:
+      - application/json
+      description: Mengubah Judul atau Waktu Pengingat
+      parameters:
+      - description: Reminder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Title / ScheduledTime
+        in: body
+        name: input
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update Reminder
+      tags:
+      - Dashboard
+  /webhook/nomor/{nomor}:
+    post:
+      consumes:
+      - application/json
+      description: Endpoint untuk menerima pesan masuk dari WhatsApp melalui webhook.
+      parameters:
+      - description: Nomor WhatsApp bot / penerima
+        in: path
+        name: nomor
+        required: true
+        type: string
+      - description: Payload pesan WhatsApp dari PushWa
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.PushWaIncoming'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Response'
+      summary: Webhook WhatsApp (PushWa)
+      tags:
+      - Webhook
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

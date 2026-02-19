@@ -52,6 +52,13 @@ func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
 	json.NewEncoder(w).Encode(data)
 }
 
+// GetHome godoc
+// @Summary Home Endpoint
+// @Description Cek status server
+// @Tags Home
+// @Produce json
+// @Success 200 {object} model.Response
+// @Router / [get]
 func GetHome(respw http.ResponseWriter, req *http.Request) {
 	resp := model.Response{Response: "Kawai Assistant Online."}
 	WriteJSON(respw, http.StatusOK, resp)
@@ -102,11 +109,9 @@ func EnsureUserExists(phone, name string) {
 // @Accept json
 // @Produce json
 // @Param nomor path string true "Nomor WhatsApp bot / penerima"
-// @Param request body model.ReqWA true "Payload pesan WhatsApp dari PushWa"
-// @Success 200 {object} map[string]string "Berhasil memproses pesan"
+// @Param request body model.PushWaIncoming true "Payload pesan WhatsApp dari PushWa"
+// @Success 200 {object} model.Response
 // @Router /webhook/nomor/{nomor} [post]
-
-// --- LOGIKA UTAMA BOT ---
 func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 

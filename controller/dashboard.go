@@ -33,6 +33,15 @@ func getIDFromURL(r *http.Request, prefix string) (primitive.ObjectID, error) {
 
 // --- NOTES ---
 
+// GetMyNotes godoc
+// @Summary Ambil Catatan User
+// @Description Mendapatkan daftar catatan milik pengguna yang sedang login.
+// @Tags Dashboard
+// @Produce json
+// @Param search query string false "Keyword Pencarian"
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/dashboard/notes [get]
 func GetMyNotes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)
@@ -71,6 +80,15 @@ func GetMyNotes(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetNoteDetailWithTags godoc
+// @Summary Detail Catatan
+// @Description Melihat detail catatan beserta hashtagnya
+// @Tags Dashboard
+// @Produce json
+// @Param id path string true "Note ID"
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/dashboard/notes/{id}/detail [get]
 func GetNoteDetailWithTags(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	
@@ -121,6 +139,17 @@ func GetNoteDetailWithTags(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UpdateNote godoc
+// @Summary Update Catatan
+// @Description Mengubah isi catatan
+// @Tags Dashboard
+// @Accept json
+// @Produce json
+// @Param id path string true "Note ID"
+// @Param input body map[string]string true "Content baru"
+// @Success 200 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/notes/{id} [put]
 func UpdateNote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)
@@ -146,6 +175,15 @@ func UpdateNote(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "msg": "Updated"})
 }
 
+// DeleteNote godoc
+// @Summary Hapus Catatan
+// @Description Menghapus catatan berdasarkan ID
+// @Tags Dashboard
+// @Produce json
+// @Param id path string true "Note ID"
+// @Success 200 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/notes/{id} [delete]
 func DeleteNote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)
@@ -171,6 +209,15 @@ func DeleteNote(w http.ResponseWriter, r *http.Request) {
 
 // --- REMINDERS ---
 
+// GetReminders godoc
+// @Summary Ambil Agenda Pengingat
+// @Description Mengambil daftar pengingat yang akan datang.
+// @Tags Dashboard
+// @Produce json
+// @Param search query string false "Keyword Pencarian"
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/dashboard/reminders [get]
 func GetReminders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)
@@ -209,6 +256,17 @@ func GetReminders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UpdateReminder godoc
+// @Summary Update Reminder
+// @Description Mengubah Judul atau Waktu Pengingat
+// @Tags Dashboard
+// @Accept json
+// @Produce json
+// @Param id path string true "Reminder ID"
+// @Param input body map[string]interface{} true "Title / ScheduledTime"
+// @Success 200 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/reminders/{id} [put]
 func UpdateReminder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)
@@ -241,6 +299,15 @@ func UpdateReminder(w http.ResponseWriter, r *http.Request) {
 }
 
 // [BARU] DELETE REMINDER
+// DeleteReminder godoc
+// @Summary Hapus Reminder
+// @Description Menghapus pengingat berdasarkan ID
+// @Tags Dashboard
+// @Produce json
+// @Param id path string true "Reminder ID"
+// @Success 200 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/reminders/{id} [delete]
 func DeleteReminder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	claims := getUserClaims(r)
@@ -274,6 +341,14 @@ func isAdmin(r *http.Request) bool {
 }
 
 // 1. LIHAT SEMUA USER (Untuk Audit/Monitoring)
+// GetAllUsers godoc
+// @Summary [ADMIN] Lihat Users
+// @Description Mengambil semua data user yang terdaftar
+// @Tags Admin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/admin/users [get]
 func GetAllUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if !isAdmin(r) {
@@ -290,6 +365,14 @@ func GetAllUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // 2. STATISTIK SIMPLE (Total User, Total Notes)
+// GetSystemStats godoc
+// @Summary [ADMIN] Lihat Statistik
+// @Description Mengambil statistik sederhana sistem
+// @Tags Admin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/admin/stats [get]
 func GetSystemStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if !isAdmin(r) {
@@ -312,6 +395,16 @@ func GetSystemStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // 3. BAN USER (Blokir User Iseng)
+// BanUser godoc
+// @Summary [ADMIN] Ban User
+// @Description Memblokir atau membuka blokir user
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Param input body map[string]string true "Target Phone & Action (ban/unban)"
+// @Success 200 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/admin/ban [post]
 func BanUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if !isAdmin(r) {
