@@ -674,6 +674,10 @@ Coba ketik waktu yang jelas ya, contohnya:
    Keyword: _Backup, Export_
    👉 _Backup_ (Simpan semua catatan ke Google Drive)
 
+6️⃣ *Cari data* 💾
+   Keyword: _Cari, Search_
+   👉 _Cari kuliah_ (Mencari catatan dengan kata kunci "kuliah")
+
 Selamat mencoba! 😊`
 	}
 
