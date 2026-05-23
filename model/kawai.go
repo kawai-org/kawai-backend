@@ -2,16 +2,17 @@ package model
 
 import (
 	"time"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// 1. users: Data induk (Admin & User User WA gabung disini, beda di 'Role')
+// 1. users: Data induk ( User User WA gabung disini, beda di 'Role')
 type User struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	PhoneNumber string             `bson:"phone_number" json:"phone_number"`
 	Name        string             `bson:"name" json:"name"`
-	Role        string             `bson:"role,omitempty" json:"role,omitempty"`     // "user" atau "admin"
-	Password    string             `bson:"password,omitempty" json:"password,omitempty"` // Cuma diisi kalau admin
+	Role        string             `bson:"role,omitempty" json:"role,omitempty"` // "user"
+	Password    string             `bson:"password,omitempty" json:"password,omitempty"`
 	CreatedAt   time.Time          `bson:"created_at,omitempty" json:"created_at,omitempty"`
 }
 
@@ -64,7 +65,7 @@ type Tag struct {
 type ActivityLog struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	UserPhone string             `bson:"user_phone" json:"user_phone"` // Siapa pelakunya
-	Action    string             `bson:"action" json:"action"`         // "LOGIN_ADMIN", "DELETE_NOTE", "GENERATE_MAGIC_LINK"
+	Action    string             `bson:"action" json:"action"`         //  "DELETE_NOTE", "GENERATE_MAGIC_LINK"
 	IPAddress string             `bson:"ip_address,omitempty" json:"ip_address,omitempty"`
 	Details   string             `bson:"details" json:"details"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`

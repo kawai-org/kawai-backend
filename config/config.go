@@ -11,4 +11,4 @@ var PhoneNumber string = os.Getenv("PHONENUMBER")
 
 // Tambahkan variabel yang hilang agar controller tidak error
 var WAAPIToken string
-var WAAPIGetToken string = "https://api.whatsauth.my.id/v1/gettoken" // Contoh URL
+var WAAPIGetToken string = "https://api.whatsauth.my.id/v1/gettoken" 

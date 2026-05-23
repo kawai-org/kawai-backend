@@ -59,24 +59,12 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostInboxNomor(w, r)
 	case method == "GET" && path == "/api/cron":
 		controller.HandleCron(w, r)
-	case method == "POST" && path == "/api/admin/login": // Login Admin
-		controller.LoginAdmin(w, r)
-	case method == "POST" && path == "/api/register":
-		controller.Register(w, r)
 
 	// --- GOOGLE AUTH ---
 	case method == "GET" && path == "/api/auth/google/login":
 		controller.GoogleLogin(w, r)
 	case method == "GET" && path == "/api/auth/google/callback":
 		controller.GoogleCallback(w, r)
-
-	// --- ADMIN DASHBOARD (PROTECTED) ---
-	case method == "GET" && path == "/api/admin/users": // Lihat User
-		MiddlewareAuth(controller.GetAllUsers)(w, r)
-	case method == "GET" && path == "/api/admin/stats": // Lihat Angka2
-		MiddlewareAuth(controller.GetSystemStats)(w, r)
-	case method == "POST" && path == "/api/admin/ban": // Blokir User
-		MiddlewareAuth(controller.BanUser)(w, r)
 
 	// --- USER DASHBOARD (PROTECTED) ---
 

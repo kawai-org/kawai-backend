@@ -91,9 +91,9 @@ func GetMyNotes(w http.ResponseWriter, r *http.Request) {
 // @Router /api/dashboard/notes/{id}/detail [get]
 func GetNoteDetailWithTags(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
-    // Ambil ID note dari URL
-    noteID, err := getIDFromURL(r, "/api/notes/detail/")
+
+	// Ambil ID note dari URL
+	noteID, err := getIDFromURL(r, "/api/notes/detail/")
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "ID URL Salah"})
 		return
@@ -107,33 +107,33 @@ func GetNoteDetailWithTags(w http.ResponseWriter, r *http.Request) {
 
 		// 2. JOIN ke tabel tags
 		bson.M{"$lookup": bson.M{
-			"from":         "tags",      
-			"localField":   "_id",       // Field di collection 'notes'
-			"foreignField": "note_id",   // Field di collection 'tags'
+			"from":         "tags",
+			"localField":   "_id",          // Field di collection 'notes'
+			"foreignField": "note_id",      // Field di collection 'tags'
 			"as":           "related_tags", // Nama field baru untuk hasil join
 		}},
 	}
 
 	cursor, err := config.Mongoconn.Collection("notes").Aggregate(context.TODO(), pipeline)
-    if err != nil {
-         json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Gagal mengambil data"})
-		 return
-    }
-    
-    // Decode hasilnya
-    var results []bson.M
-    if cursor != nil {
-        cursor.All(context.TODO(), &results)
-    }
-    
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Gagal mengambil data"})
+		return
+	}
+
+	// Decode hasilnya
+	var results []bson.M
+	if cursor != nil {
+		cursor.All(context.TODO(), &results)
+	}
+
 	// Cek apakah data ditemukan
 	if len(results) == 0 {
 		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Catatan tidak ditemukan"})
 		return
 	}
 
-    // Kembalikan item pertama (karena search by ID pasti cuma 1)
-    json.NewEncoder(w).Encode(map[string]interface{}{
+	// Kembalikan item pertama (karena search by ID pasti cuma 1)
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status": "success",
 		"data":   results[0],
 	})
@@ -161,7 +161,9 @@ func UpdateNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var input struct { Content string `json:"content"` }
+	var input struct {
+		Content string `json:"content"`
+	}
 	json.NewDecoder(r.Body).Decode(&input)
 
 	filter := bson.M{"_id": noteID, "user_phone": userPhone}
@@ -197,7 +199,7 @@ func DeleteNote(w http.ResponseWriter, r *http.Request) {
 
 	filter := bson.M{"_id": noteID, "user_phone": userPhone}
 	res, _ := config.Mongoconn.Collection("notes").DeleteOne(context.TODO(), filter)
-	
+
 	if res.DeletedCount == 0 {
 		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Gagal hapus"})
 		return
@@ -251,8 +253,8 @@ func GetReminders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "success", 
-		"data": reminders,
+		"status": "success",
+		"data":   reminders,
 	})
 }
 
@@ -285,8 +287,12 @@ func UpdateReminder(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&input)
 
 	updateFields := bson.M{}
-	if input.Title != "" { updateFields["title"] = input.Title }
-	if !input.Time.IsZero() { updateFields["scheduled_time"] = input.Time }
+	if input.Title != "" {
+		updateFields["title"] = input.Title
+	}
+	if !input.Time.IsZero() {
+		updateFields["scheduled_time"] = input.Time
+	}
 
 	filter := bson.M{"_id": id, "user_phone": userPhone}
 	res, _ := config.Mongoconn.Collection("reminders").UpdateOne(context.TODO(), filter, bson.M{"$set": updateFields})
@@ -326,111 +332,5 @@ func DeleteReminder(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Gagal hapus"})
 	} else {
 		json.NewEncoder(w).Encode(map[string]string{"status": "success", "msg": "Deleted"})
-	}
-}
-
-// ==========================================
-// BAGIAN 2: ADMIN SIMPLE (Tukang Intip & Satpam)
-// ==========================================
-
-// Helper Cek Admin
-func isAdmin(r *http.Request) bool {
-	claims := getUserClaims(r)
-	role, ok := claims["role"].(string)
-	return ok && role == "admin" 
-}
-
-// 1. LIHAT SEMUA USER (Untuk Audit/Monitoring)
-// GetAllUsers godoc
-// @Summary [ADMIN] Lihat Users
-// @Description Mengambil semua data user yang terdaftar
-// @Tags Admin
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Security BearerAuth
-// @Router /api/admin/users [get]
-func GetAllUsers(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if !isAdmin(r) {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "Khusus Admin"})
-		return
-	}
-
-	cursor, _ := config.Mongoconn.Collection("users").Find(context.TODO(), bson.M{})
-	users := []model.User{}
-	if cursor != nil { cursor.All(context.TODO(), &users) }
-
-	json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "total": len(users), "data": users})
-}
-
-// 2. STATISTIK SIMPLE (Total User, Total Notes)
-// GetSystemStats godoc
-// @Summary [ADMIN] Lihat Statistik
-// @Description Mengambil statistik sederhana sistem
-// @Tags Admin
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Security BearerAuth
-// @Router /api/admin/stats [get]
-func GetSystemStats(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if !isAdmin(r) {
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	userCount, _ := config.Mongoconn.Collection("users").CountDocuments(context.TODO(), bson.M{})
-	noteCount, _ := config.Mongoconn.Collection("notes").CountDocuments(context.TODO(), bson.M{})
-	reminderCount, _ := config.Mongoconn.Collection("reminders").CountDocuments(context.TODO(), bson.M{})
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "success",
-		"stats": map[string]int64{
-			"total_users":     userCount,
-			"total_notes":     noteCount,
-			"total_reminders": reminderCount,
-		},
-	})
-}
-
-// 3. BAN USER (Blokir User Iseng)
-// BanUser godoc
-// @Summary [ADMIN] Ban User
-// @Description Memblokir atau membuka blokir user
-// @Tags Admin
-// @Accept json
-// @Produce json
-// @Param input body map[string]string true "Target Phone & Action (ban/unban)"
-// @Success 200 {object} map[string]string
-// @Security BearerAuth
-// @Router /api/admin/ban [post]
-func BanUser(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if !isAdmin(r) {
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	var input struct {
-		Phone  string `json:"phone_number"`
-		Action string `json:"action"` // "ban" atau "unban"
-	}
-	json.NewDecoder(r.Body).Decode(&input)
-
-	status := "active"
-	if input.Action == "ban" {
-		status = "banned"
-	}
-
-	filter := bson.M{"phone_number": input.Phone}
-	update := bson.M{"$set": bson.M{"status": status}}
-	
-	res, _ := config.Mongoconn.Collection("users").UpdateOne(context.TODO(), filter, update)
-	
-	if res.MatchedCount == 0 {
-		json.NewEncoder(w).Encode(map[string]string{"status": "error", "msg": "User tidak ditemukan"})
-	} else {
-		json.NewEncoder(w).Encode(map[string]string{"status": "success", "msg": "Status user diupdate: " + status})
 	}
 }

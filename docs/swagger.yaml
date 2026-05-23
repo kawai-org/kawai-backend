@@ -16,7 +16,7 @@ definitions:
       phone_number:
         type: string
       secret_code:
-        description: 'Opsional: Untuk jadi Admin'
+        description: 'Opsional '
         type: string
     type: object
   model.PushWaIncoming:
@@ -74,101 +74,6 @@ paths:
       summary: Home Endpoint
       tags:
       - Home
-  /api/admin/ban:
-    post:
-      consumes:
-      - application/json
-      description: Memblokir atau membuka blokir user
-      parameters:
-      - description: Target Phone & Action (ban/unban)
-        in: body
-        name: input
-        required: true
-        schema:
-          additionalProperties:
-            type: string
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: '[ADMIN] Ban User'
-      tags:
-      - Admin
-  /api/admin/login:
-    post:
-      consumes:
-      - application/json
-      description: Login untuk admin menggunakan nomor HP dan password
-      parameters:
-      - description: Kredensial Login
-        in: body
-        name: input
-        required: true
-        schema:
-          $ref: '#/definitions/controller.LoginInput'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Token JWT dan Role
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid Body
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Password Salah / Bukan Admin
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Login Admin
-      tags:
-      - Auth
-  /api/admin/stats:
-    get:
-      description: Mengambil statistik sederhana sistem
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: '[ADMIN] Lihat Statistik'
-      tags:
-      - Admin
-  /api/admin/users:
-    get:
-      description: Mengambil semua data user yang terdaftar
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: '[ADMIN] Lihat Users'
-      tags:
-      - Admin
   /api/auth/google/callback:
     get:
       description: Menerima kode otorisasi Google dan menukar dengan Token
