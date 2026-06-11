@@ -220,7 +220,8 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		} else if hasPrefixAny(pesanLower, []string{"dashboard", "admin", "panel", "login"}) {
     
     // 1. Buat Token JWT (Berlaku 15 menit)
-    expirationTime := time.Now().Add(15 * time.Minute)
+   // 1. Buat Token JWT (Berlaku 3 jam untuk Testing)
+    expirationTime := time.Now().Add(3 * time.Hour)
     claims := &jwt.MapClaims{
         "user_phone": sender,
         "role":       "user",
@@ -688,6 +689,13 @@ Selamat mencoba! 😊`
 		}
 		atapi.PostJSON[interface{}](kirim, profile.URLApi)
 	}
+
+	// MODIFIKASI TESTING: Keluarkan balasan bot ke Postman
+	if replyMsg != "" {
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "OK",
+			"bot_reply": replyMsg, // Magic Link akan muncul di sini!
+		})
 
 	json.NewEncoder(w).Encode(model.Response{Response: "OK"})
 }
