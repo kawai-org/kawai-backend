@@ -682,7 +682,7 @@ Coba ketik waktu yang jelas ya, contohnya:
 Selamat mencoba! 😊`
 	}
 
-	// Kirim Balasan Final
+	// Kirim Balasan Final ke PushWa (kalau hidup)
 	if replyMsg != "" && profile.Token != "" {
 		kirim := model.PushWaSend{
 			Token:   profile.Token, Target: msg.From, Type: "text", Delay: "1", Message: replyMsg,
@@ -696,9 +696,11 @@ Selamat mencoba! 😊`
 			"status": "OK",
 			"bot_reply": replyMsg, // Magic Link akan muncul di sini!
 		})
+		return
+	}
 
 	json.NewEncoder(w).Encode(model.Response{Response: "OK"})
-}
+} // <--- KURUNG KURAWAL INI YANG TADI KEMUNGKINAN HILANG
 
 func NotFound(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json") 
