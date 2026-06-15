@@ -180,11 +180,18 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 
 	if finalFileUrl != "" {
 		// --- LOGIKA UPLOAD ---
-		kirimLoading := model.PushWaSend{
-			Token:   profile.Token, Target: msg.From, Type: "text", Delay: "0",
-			Message: "⏳ Sedang mendownload file...",
+		// Kirim Loading Upload (Support Fonnte & PushWa)
+		if strings.Contains(profile.URLApi, "fonnte.com") {
+			kirimLoading := model.FonnteSend{
+				Target: msg.From, Delay: "0", Message: "⏳ Sedang mendownload file...",
+			}
+			atapi.PostStructWithTokenMod[interface{}]("Authorization", profile.Token, kirimLoading, profile.URLApi)
+		} else {
+			kirimLoading := model.PushWaSend{
+				Token: profile.Token, Target: msg.From, Type: "text", Delay: "0", Message: "⏳ Sedang mendownload file...",
+			}
+			atapi.PostJSON[interface{}](kirimLoading, profile.URLApi)
 		}
-		atapi.PostJSON[interface{}](kirimLoading, profile.URLApi)
 
 		fileName := pesan
 		if fileName == "" {
@@ -244,7 +251,7 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
     magicLink := fmt.Sprintf("https://kawai-frontend.vercel.app/auth/magic?token=%s", tokenString)
     
     // 4. Siapkan Pesan Balasan
-    replyMsg = fmt.Sprintf("🎛 *DASHBOARD USER*\n\nKlik link di bawah ini untuk mengelola catatan & pengingat (Edit/Hapus/Rapikan):\n\n👉 %s\n\n_Link ini kedaluwarsa dalam 15 menit._", magicLink)
+    replyMsg = fmt.Sprintf("🎛 *DASHBOARD USER*\n\nKlik link di bawah ini untuk mengelola catatan & pengingat (Edit/Hapus/Rapikan):\n\n👉 %s\n\n_._", magicLink)
 
     // 5. [IMPLEMENTASI STORED PROCEDURE / AUDIT LOG]
     // Catat aktivitas ini ke database secara background (Async)
@@ -306,11 +313,18 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 					fileReader := strings.NewReader(fileContent)
 					fileName := fmt.Sprintf("Backup_Kawai_%s.txt", time.Now().Format("20060102_1504"))
 
-					kirimLoading := model.PushWaSend{
-						Token:   profile.Token, Target: msg.From, Type: "text", Delay: "0",
-						Message: "⏳ Membuat backup & upload ke Drive...",
+					// Kirim Loading Backup (Support Fonnte & PushWa)
+					if strings.Contains(profile.URLApi, "fonnte.com") {
+						kirimLoading := model.FonnteSend{
+							Target: msg.From, Delay: "0", Message: "⏳ Membuat backup & upload ke Drive...",
+						}
+						atapi.PostStructWithTokenMod[interface{}]("Authorization", profile.Token, kirimLoading, profile.URLApi)
+					} else {
+						kirimLoading := model.PushWaSend{
+							Token: profile.Token, Target: msg.From, Type: "text", Delay: "0", Message: "⏳ Membuat backup & upload ke Drive...",
+						}
+						atapi.PostJSON[interface{}](kirimLoading, profile.URLApi)
 					}
-					atapi.PostJSON[interface{}](kirimLoading, profile.URLApi)
 
 					fileID, webLink, errUp := gdrive.UploadToDrive(sender, fileName, fileReader)
 
@@ -682,12 +696,28 @@ Coba ketik waktu yang jelas ya, contohnya:
 Selamat mencoba! 😊`
 	}
 
-	// Kirim Balasan Final ke PushWa (kalau hidup)
+// Kirim Balasan Final (Support Fonnte & PushWa)
 	if replyMsg != "" && profile.Token != "" {
-		kirim := model.PushWaSend{
-			Token:   profile.Token, Target: msg.From, Type: "text", Delay: "1", Message: replyMsg,
+		// Cek apakah URL-nya milik Fonnte
+		if strings.Contains(profile.URLApi, "fonnte.com") {
+			kirimFonnte := model.FonnteSend{
+				Target:  msg.From,
+				Delay:   "1",
+				Message: replyMsg,
+			}
+			// Fonnte butuh Header "Authorization: TOKEN"
+			atapi.PostStructWithTokenMod[interface{}]("Authorization", profile.Token, kirimFonnte, profile.URLApi)
+		} else {
+			// KEMBALI KE PUSHWA JIKA NANTI DIPAKAI LAGI
+			kirimPushWa := model.PushWaSend{
+				Token:   profile.Token, 
+				Target:  msg.From, 
+				Type:    "text", 
+				Delay:   "1", 
+				Message: replyMsg,
+			}
+			atapi.PostJSON[interface{}](kirimPushWa, profile.URLApi)
 		}
-		atapi.PostJSON[interface{}](kirim, profile.URLApi)
 	}
 
 	// MODIFIKASI TESTING: Keluarkan balasan bot ke Postman

@@ -34,3 +34,11 @@ type APIResponse struct {
     Status  interface{} `json:"status"`
     Message string      `json:"message"`
 }
+
+// 5. Struktur Kirim Pesan ke Fonnte
+type FonnteSend struct {
+	Target string `json:"target"`
+	Typing string `json:"typing,omitempty"` // Opsional: False
+	Delay  string `json:"delay"`
+	Message string `json:"message"`
+}
