@@ -122,6 +122,19 @@ func PostInboxNomor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- ADAPTOR FONNTE
+	// Jika Fonnte mengirim data, pindahkan isinya ke variabel standar PushWa
+	if msg.From == "" && msg.Sender != "" {
+		msg.From = msg.Sender
+	}
+	if msg.Message == "" && msg.Text != "" {
+		msg.Message = msg.Text
+	}
+	if msg.PushName == "" && msg.Name != "" {
+		msg.PushName = msg.Name
+	}
+
+	// Cek apakah data kosong
 	if msg.From == "" {
 		json.NewEncoder(w).Encode(model.Response{Response: "Empty Data"})
 		return

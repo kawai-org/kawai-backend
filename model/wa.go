@@ -1,18 +1,26 @@
 package model
 
-// 1. Pesan Masuk dari PushWa / WhatsApp
+// 1. Pesan Masuk dari PushWa / WhatsApp / Fonnte
 type PushWaIncoming struct {
 	DeviceNumber string `json:"deviceNumber"`
+	Device       string `json:"device,omitempty"` // Milik Fonnte
+
 	Message      string `json:"message"`
-	PushName string `json:"pushname"`
-	From         string `json:"from"` 
+	Text         string `json:"text,omitempty"`   // Milik Fonnte
+
+	PushName     string `json:"pushname"`
+	Name         string `json:"name,omitempty"`   // Milik Fonnte
+
+	From         string `json:"from"`
+	Sender       string `json:"sender,omitempty"` // Milik Fonnte
+
 	ChatID       string `json:"chat_id,omitempty"` 
-    RemoteJID    string `json:"remote_jid,omitempty"`
-    Participant  string `json:"participant,omitempty"`
-	FileUrl      string `json:"file_url,omitempty"`  // Versi 1
-	Url          string `json:"url,omitempty"`       // Versi 2 (Sering dipakai)
-	MimeType     string `json:"mimetype,omitempty"`  // Versi 1
-	MimeType2    string `json:"mime_type,omitempty"` // Versi 2
+	RemoteJID    string `json:"remote_jid,omitempty"`
+	Participant  string `json:"participant,omitempty"`
+	FileUrl      string `json:"file_url,omitempty"`  
+	Url          string `json:"url,omitempty"`       
+	MimeType     string `json:"mimetype,omitempty"`  
+	MimeType2    string `json:"mime_type,omitempty"` 
 }
 
 // 2. Struktur Kirim Pesan ke PushWa
