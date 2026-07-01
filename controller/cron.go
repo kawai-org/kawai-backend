@@ -90,15 +90,22 @@ func HandleCron(w http.ResponseWriter, r *http.Request) {
 			waktuWIB.Format("02 Jan 2006, 15:04 WIB"), // Tampilkan lengkap di bawah
 		)
 
-		kirim := model.PushWaSend{
-			Token:   profile.Token,
-			Target:  rem.UserPhone,
-			Type:    "text",
-			Delay:   "1",
-			Message: pesan,
+	var statusCode int
+		var apiRes model.APIResponse
+		var errSend error
+
+		// Cek apakah menggunakan API Fonnte atau PushWa
+		if strings.Contains(profile.URLApi, "fonnte.com") {
+			kirim := model.FonnteSend{
+				Target:  rem.UserPhone, Delay: "1", Message: pesan,
+			}
+			statusCode, apiRes, errSend = atapi.PostStructWithTokenMod[model.APIResponse]("Authorization", profile.Token, kirim, profile.URLApi)
+		} else {
+			kirim := model.PushWaSend{
+				Token:   profile.Token, Target:  rem.UserPhone, Type:    "text", Delay:   "1", Message: pesan,
+			}
+			statusCode, apiRes, errSend = atapi.PostJSON[model.APIResponse](kirim, profile.URLApi)
 		}
-		
-		statusCode, apiRes, errSend := atapi.PostJSON[model.APIResponse](kirim, profile.URLApi)
 
 		isSuccess := false
 		
